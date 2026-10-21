@@ -16,3 +16,7 @@ python server.py
 ```
 
 Open http://127.0.0.1:8080/admin/ . Local credentials are generated on the first start.
+
+## Deployment
+
+Live admin: https://admin.momiq.net . Push to main runs JS checks and deploys the exact commit via GitHub Actions. Credentials are generated on the server in /var/lib/momiq/admin-login.txt (read via sudo); they are not committed. Backend operations and SSL instructions are in the backend DEPLOYMENT.md.
