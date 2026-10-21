@@ -4,7 +4,7 @@ const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefine
 function notice(text){$('#notice').textContent=text;$('#notice').hidden=false;clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('#notice').hidden=true,5000)}
 async function api(path,method='GET',body){const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});const data=await r.json();if(!r.ok){if(r.status===401){$('#app').hidden=true;$('#login').hidden=false}throw Error(data.error||'Server xatosi')}return data}
 function source(photo){if(!photo)return '';const kind=photo.startsWith('/9j/')?'jpeg':photo.startsWith('UklGR')?'webp':'png';return 'data:image/'+kind+';base64,'+photo}
-function avatar(user){const p=user.account.profile;if(p.photo){const img=el('img',undefined,'avatar');img.src=source(p.photo);img.alt='Profil rasmi';return img}return el('span',(p.first||'?').slice(0,1),'avatar')}
+function avatar(user){const p=user.account.profile;if(p.photo){const img=el('img',undefined,'avatar');img.src=source(p.photo);img.alt=name(user)+' — profil rasmi';img.loading='lazy';img.onerror=()=>img.replaceWith(el('span',(p.first||'?').slice(0,1),'avatar'));return img}return el('span',(p.first||'?').slice(0,1),'avatar')}
 function name(user){return [user.account.profile.first,user.account.profile.last].filter(Boolean).join(' ')||'Yangi foydalanuvchi'}
 function skeleton(){const box=$('#userList');box.replaceChildren();for(let i=0;i<3;i++)box.append(el('div',undefined,'skeleton'))}
 const titles={customer:'Mijozlar',sitter:'Enagalar',listings:'E’lonlar'};

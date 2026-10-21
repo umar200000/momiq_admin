@@ -12,15 +12,17 @@ test('role navigation separates users and renders server listings', async () => 
   }
   const nodes=new Map();
   const get=s=>{if(!nodes.has(s))nodes.set(s,new Element());return nodes.get(s)};
-  const user=(id,roles)=>({id,roles,phone:'998900000000',blocked:false,created:'2026-01-01',account:{profile:{first:id,last:'Test'},favorites:[],addresses:[]}});
+  const user=(id,roles)=>({id,roles,phone:'998900000000',blocked:false,created:'2026-01-01',account:{profile:{first:id,last:'Test',photo:'/9j/test'},favorites:[],addresses:[]}});
   const users=[user('customer',['customer']),user('sitter',['sitter']),user('both',['customer','sitter'])];
   const listing={id:'sitter:homeVisit',userId:'sitter',profile:users[1].account.profile,phone:users[1].phone,type:'homeVisit',price:55000,pets:['cat'],active:true,housing:'house',updated:'2026-01-01'};
   const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},fetch:async path=>({ok:true,json:async()=>path.endsWith('/users')?{users,sitters:{}}:{listings:[listing]}}),setInterval(){},setTimeout(){},clearTimeout(){},structuredClone,console});
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(get('#count').textContent,2);
+  assert.equal(get('#userList').children[0].children[0].src,'data:image/jpeg;base64,/9j/test');
   get('#sittersNav').onclick();
   assert.equal(get('#count').textContent,2);
+  assert.equal(get('#userList').children[0].children[0].src,'data:image/jpeg;base64,/9j/test');
   const text=node=>node.textContent+' '+node.children.map(text).join(' ');
   assert.match(text(get('#userList')),/sitter/);
   assert.doesNotMatch(text(get('#userList')),/customer Test/);
