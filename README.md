@@ -20,3 +20,6 @@ Open http://127.0.0.1:8080/admin/ . Local credentials are generated on the first
 ## Deployment
 
 Live admin: https://admin.momiq.net . Push to main runs JS checks and deploys the exact commit via GitHub Actions. Credentials are generated on the server in /var/lib/momiq/admin-login.txt (read via sudo); they are not committed. Backend operations and SSL instructions are in the backend DEPLOYMENT.md.
+
+## Users and listings
+Mijozlar and Enagalar filter durable role memberships; dual-role accounts appear in both. E’lonlar displays real server listings and owner profiles. Listings are read-only here. Run `node --test test_admin.cjs` for navigation and listing rendering checks.

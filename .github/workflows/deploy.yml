@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --check app.js
+      - run: node --test test_admin.cjs
       - run: test -s index.html && test -s style.css
 
   deploy:
