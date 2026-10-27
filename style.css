@@ -3,3 +3,4 @@
 .listingFacts{display:grid;grid-template-columns:140px 1fr;gap:14px 20px;margin:28px 0}.listingFacts dt{color:var(--muted)}.listingFacts dd{margin:0;overflow-wrap:anywhere}.profileHead+.meta{margin-bottom:16px}@media(max-width:700px){.listingFacts{grid-template-columns:1fr;gap:4px}.listingFacts dd{margin-bottom:14px}}
 
 .walletPanel{background:var(--surface);border:1px solid var(--line);border-radius:24px}.walletImage{display:block;max-width:100%;max-height:480px;object-fit:contain;margin:16px 0}.topupCard{padding:24px 0;border-bottom:1px solid var(--line)}.walletPanel input[type=checkbox]{width:auto;margin-right:12px}.walletPanel form{max-width:640px}.topupCard form>button{margin:16px 12px 0 0}
+.detail input[type=checkbox]{width:auto;margin-right:10px;vertical-align:middle}
