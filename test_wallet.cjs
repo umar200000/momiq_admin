@@ -18,6 +18,7 @@ function setup() {
 test('financial input uses exact hundredths and validates bounds', () => {
   const {context} = setup();
   assert.equal(vm.runInContext("parseMinor('15000.01')",context),1500001);
+  assert.equal(vm.runInContext("parseMinor('15000,01')",context),1500001);
   assert.equal(vm.runInContext("parseMinor('0',true)",context),0);
   for(const value of ['0','-1','1e3','1.001','1000000001']) assert.throws(()=>vm.runInContext(`parseMinor('${value}')`,context));
 });

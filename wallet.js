@@ -4,8 +4,9 @@ let topupStatus = 'pending';
 let topupRows = [];
 
 function parseMinor(value, allowZero = false) {
-  if (!/^\d+(?:\.\d{1,2})?$/.test(value.trim())) throw Error('Summani 2 kasr xonasigacha kiriting.');
-  const [whole, fraction = ''] = value.trim().split('.');
+  const normalized = value.trim().replaceAll(',', '.');
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw Error('Summani 2 kasr xonasigacha kiriting.');
+  const [whole, fraction = ''] = normalized.split('.');
   const minor = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
   if (minor > 100000000000n || minor < (allowZero ? 0n : 1n)) throw Error('Summa chegaradan tashqarida.');
   return Number(minor);
@@ -86,11 +87,12 @@ function renderTopups(rows, nextCursor) {
   }
   filter.value=topupStatus; filter.onchange=()=>{topupStatus=filter.value;openWalletAdmin('topups');}; panel.append(filter);
   panel.append(el('p', 'Chekning o‘zi balansga pul qo‘shmaydi. Paynet Xolis tushumini tekshirib, aynan shu to‘lovning yagona identifikatorini kiriting.'));
-  if (!rows.length) panel.append(el('h2', 'Hozircha chek yuborilmagan'));
+  if (!rows.length) panel.append(el('h2', 'Tanlangan holatda so‘rov yo‘q'));
   for (const row of rows) {
     const card = el('article', undefined, 'topupCard');
     const owner = state.users.find(user => user.id === row.userId);
-    card.append(el('h2', walletMoney(row.amountMinor)), el('p', owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', row.status + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
+    const statusLabel = {pending:'Tekshirilmoqda',approved:'Tasdiqlangan',rejected:'Rad etilgan'}[row.status] || row.status;
+    card.append(el('h2', walletMoney(row.amountMinor)), el('p', owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', statusLabel + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
     const details = el('details'); details.append(el('summary', 'Chekni ko‘rish')); card.append(details);
     let loaded=false, loading=false;
     details.ontoggle=async()=>{
