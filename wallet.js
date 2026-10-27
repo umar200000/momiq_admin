@@ -64,6 +64,13 @@ function renderWalletSettings(config) {
   };
   const test = walletField(form, 'Bu sinov QR kodi', 'testOnly', 'checkbox');
   test.required = false; test.checked = config.testOnly;
+  const recipient = walletField(form, 'To‘lov oluvchining nomi (provayderdagi nom bilan bir xil)', 'recipientName');
+  recipient.required = false; recipient.maxLength = 200; recipient.value = config.recipientName || '';
+  const instructions = walletField(form, 'To‘lov yo‘riqnomasi / izoh', 'paymentInstructions');
+  instructions.required = false; instructions.maxLength = 1000; instructions.value = config.paymentInstructions || '';
+  const active = walletField(form, 'Ilovada yangi to‘lovlar uchun QR’ni ko‘rsatish', 'qrActive', 'checkbox');
+  active.required = false; active.checked = config.qrActive === true;
+  form.append(el('p', 'Bu sozlama Momiqdagi QR ko‘rinishini boshqaradi; provayderdagi QR’ni o‘chirmaydi. Oldingi faol QR orqali to‘langan cheklar qabul qilinadi va o‘z QR nusxasiga bog‘lanadi.', 'meta'));
   const reason = walletField(form, 'O‘zgartirish sababi', 'reason'); reason.maxLength = 1000;
   const save = el('button', 'Sozlamalarni saqlash'); form.append(save);
   form.onsubmit = async event => {
@@ -71,7 +78,8 @@ function renderWalletSettings(config) {
     try {
       const commissionBps = parseMinor(rate.value, true);
       if (commissionBps > 10000) throw Error('Foiz 0–100 oralig‘ida bo‘lsin.');
-      await api('platform-settings', 'PUT', {version: config.version, commissionBps, qrImage: qr, testOnly: test.checked, reason: reason.value.trim()});
+      if (active.checked && (!qr || !recipient.value.trim())) throw Error('Faol QR uchun rasm va oluvchi nomini kiriting.');
+      await api('platform-settings', 'PUT', {version: config.version, commissionBps, qrImage: qr, testOnly: test.checked, reason: reason.value.trim(), recipientName:recipient.value.trim(), paymentInstructions:instructions.value.trim(), qrActive:active.checked});
       await openWalletAdmin('settings'); notice('Sozlamalar saqlandi.');
     } catch (error) { notice(error.message); }
     finally { save.disabled = false; }
@@ -98,7 +106,18 @@ function renderTopups(rows, nextCursor) {
     details.ontoggle=async()=>{
       if (!details.open || loaded || loading) return;
       loading=true;
-      try { const data=await api('topups/'+row.id+'/receipt'); details.append(walletImage(data.receipt,'Enaga yuborgan to‘lov cheki')); loaded=true; }
+      try {
+        const data=await api('topups/'+row.id+'/receipt');
+        details.append(walletImage(data.receipt,'Enaga yuborgan to‘lov cheki'));
+        if(data.paymentSnapshot){
+          const snapshot=data.paymentSnapshot;
+          details.append(el('h3','To‘lov paytidagi QR · v'+snapshot.version),el('p','Oluvchi: '+(snapshot.recipientName||'Eski versiyada saqlanmagan')));
+          if(snapshot.paymentInstructions)details.append(el('p',snapshot.paymentInstructions));
+          if(snapshot.testOnly)details.append(el('p','TEST QR — haqiqiy tushum emas'));
+          if(snapshot.qrImage)details.append(walletImage(snapshot.qrImage,'So‘rovga bog‘langan QR nusxasi'));
+        }
+        loaded=true;
+      }
       catch(error) { notice(error.message); details.open=false; }
       finally { loading=false; }
     };

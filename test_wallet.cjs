@@ -44,3 +44,19 @@ test('approval requires verified matching incoming funds; rejection needs only r
   await second.children.find(n=>n.type==='button').onclick();
   assert.equal(calls.find(c=>c.body?.decision==='reject').body.reason,'No incoming transfer');
 });
+
+test('activating a QR requires a recipient and sends the loaded version', async () => {
+  const {context,get,calls,notices}=setup();
+  context.config={version:7,commissionBps:1000,minimumBalanceMinor:1500000,qrImage:'test',testOnly:true,qrActive:false};
+  vm.runInContext('renderWalletSettings(config)',context);
+  const form=get('#walletPanel').children.find(n=>n.tag==='form');
+  const fields=Object.fromEntries(form.children.filter(n=>n.tag==='label').map(n=>[n.children[0].name,n.children[0]]));
+  fields.qrActive.checked=true;fields.reason.value='TEST only';
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(calls.length,0);assert.match(notices.at(-1),/oluvchi/);
+  fields.recipientName.value='TEST COMPANY';fields.paymentInstructions.value='TEST ONLY';
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(calls[0].body.version,7);
+  assert.equal(calls[0].body.recipientName,'TEST COMPANY');
+  assert.equal(calls[0].body.qrActive,true);
+});
