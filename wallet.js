@@ -27,12 +27,13 @@ function walletImage(data, label) {
 
 async function openWalletAdmin(section) {
   walletSection = section;
+  $('#chatPanel').hidden = true;
   state.tab = 'profile';
   $('#accountWorkspace').hidden = true;
   $('#accountStats').hidden = true;
   $('#walletPanel').hidden = false;
   $('#heading').textContent = section === 'settings' ? 'Komissiya va Paynet Xolis QR' : 'Balans to‘ldirish so‘rovlari';
-  for (const id of ['usersNav', 'sittersNav', 'listingsNav', 'topupsNav', 'settingsNav']) {
+  for (const id of ['usersNav', 'sittersNav', 'listingsNav', 'topupsNav', 'settingsNav', 'chatReportsNav']) {
     $('#' + id).classList.toggle('active', id === (section === 'settings' ? 'settingsNav' : 'topupsNav'));
   }
   $('#refresh').onclick = () => openWalletAdmin(walletSection);

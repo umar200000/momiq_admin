@@ -23,3 +23,6 @@ Live admin: https://admin.momiq.net . Push to main runs JS checks and deploys th
 
 ## Users and listings
 Mijozlar and Enagalar filter durable role memberships; dual-role accounts appear in both. E’lonlar displays real server listings and owner profiles. Listings are read-only here. Run `node --test test_admin.cjs` for navigation and listing rendering checks.
+
+
+Chat reports: the Chat shikoyatlari section lists paginated incoming-message reports. Evidence and image access are explicit and audited; the operator sees only the reported message, not the entire conversation. A decision requires the loaded revision and a reason. Hide preserves original evidence while removing participant text/image access; dismiss leaves the message visible. Stale/parallel review cannot overwrite another decision. Current admin sessions still share existing administrator access; separate moderator/finance/support permissions remain a production gate. Run `node --test test_admin.cjs test_revision.cjs test_wallet.cjs test_chat.cjs`.
