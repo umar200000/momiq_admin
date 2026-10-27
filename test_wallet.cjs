@@ -86,3 +86,20 @@ test('clarification sends loaded revision and reason without claiming funds', as
   assert.equal(calls[0].body.revision,7);
   assert.equal(calls[0].body.fundsVerified,undefined);
 });
+
+
+test('history shows actor and fetches each historical image only on demand', async () => {
+  const {context,get,calls}=setup();
+  context.api=async(path)=>{calls.push({path});return path.endsWith('/receipt')?{receipt:'TEST-image'}:{items:[{revision:0,event:'created',actor:'TEST-owner',created:'2026-10-27T10:00:00Z',amountMinor:1500000,payerReference:'TEST',reason:''}],nextCursor:null};};
+  context.rows=[{id:'abc',revision:1,userId:'sitter',amountMinor:1500000,status:'needs_info',created:'2026-10-27T10:00:00Z'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article');
+  const history=card.children.find(n=>n.tag==='details'&&n.children[0].textContent.includes('tarixi'));
+  history.open=true;await history.ontoggle();
+  assert.equal(calls.length,1);assert.equal(calls[0].path,'topups/abc/history');
+  const entry=history.children.find(n=>n.tag==='section');
+  assert.ok(entry.children.some(n=>n.textContent.includes('TEST-owner')));
+  await entry.children.find(n=>n.tag==='button').onclick();
+  assert.equal(calls[1].path,'topups/abc/history/0/receipt');
+  assert.equal(entry.children.filter(n=>n.tag==='img').length,1);
+});

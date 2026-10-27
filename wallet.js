@@ -184,6 +184,7 @@ function appendTopupHistory(card,row) {
         const eventLabel={created:'Yuborilgan',migrated:'Eski yozuvdan saqlangan nusxa',request_info:'Aniqlashtirish so‘ralgan',resubmitted:'Qayta yuborilgan',approve:'Tasdiqlangan',reject:'Rad etilgan'}[item.event]||item.event;
         const entry=el('section');entry.append(el('h3',eventLabel+' · v'+item.revision),el('p',walletMoney(item.amountMinor)+' · '+new Date(item.created).toLocaleString('uz-UZ',{timeZone:'Asia/Tashkent'})));
         if(item.reason)entry.append(el('p',item.reason));
+        if(item.actor)entry.append(el('p','Amal egasi: '+item.actor));
         if(item.payerReference)entry.append(el('p','Enaga reference: '+item.payerReference));
         const imageButton=el('button','Shu bosqichdagi chek');imageButton.type='button';
         imageButton.onclick=async()=>{imageButton.disabled=true;try{const data=await api('topups/'+row.id+'/history/'+item.revision+'/receipt');entry.append(walletImage(data.receipt,'Chekning v'+item.revision+' nusxasi'));imageButton.hidden=true;}catch(error){notice(error.message);}finally{imageButton.disabled=false;}};
@@ -193,7 +194,7 @@ function appendTopupHistory(card,row) {
       if(cursor!==null)history.append(more);
     }catch(error){notice(error.message);}finally{loading=false;more.disabled=false;}
   };
-  history.ontoggle=()=>{if(history.open&&!loaded)load();};more.onclick=load;
+  history.ontoggle=()=>{if(history.open&&!loaded)return load();};more.onclick=load;
 }
 $('#topupsNav').onclick = () => openWalletAdmin('topups');
 $('#settingsNav').onclick = () => openWalletAdmin('settings');
