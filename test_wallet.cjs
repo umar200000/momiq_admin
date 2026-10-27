@@ -60,3 +60,15 @@ test('activating a QR requires a recipient and sends the loaded version', async 
   assert.equal(calls[0].body.recipientName,'TEST COMPANY');
   assert.equal(calls[0].body.qrActive,true);
 });
+
+
+test('payer metadata is evidence only and never pre-fills verified transfer reference', () => {
+  const {context,get}=setup();
+  context.rows=[{id:'abc',userId:'sitter',amountMinor:1500000,status:'pending',created:'2026-10-26',payerReference:'UNVERIFIED-123',paidAt:'2026-10-26T05:00:00Z'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article');
+  assert.ok(card.children.some(n=>n.textContent.includes('UNVERIFIED-123')));
+  const form=card.children.find(n=>n.tag==='form');
+  const reference=form.children.find(n=>n.tag==='label'&&n.children[0].name==='reference').children[0];
+  assert.equal(reference.value,'');
+});

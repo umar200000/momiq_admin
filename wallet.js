@@ -101,6 +101,11 @@ function renderTopups(rows, nextCursor) {
     const owner = state.users.find(user => user.id === row.userId);
     const statusLabel = {pending:'Tekshirilmoqda',approved:'Tasdiqlangan',rejected:'Rad etilgan'}[row.status] || row.status;
     card.append(el('h2', walletMoney(row.amountMinor)), el('p', owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', statusLabel + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
+    if (row.payerReference || row.paidAt) {
+      card.append(el('h3', 'Enaga kiritgan ma’lumot (hali tekshirilmagan)'));
+      if (row.payerReference) card.append(el('p', 'Chekdagi operatsiya ID: ' + row.payerReference));
+      if (row.paidAt) card.append(el('p', 'To‘lov vaqti (Toshkent): ' + new Date(row.paidAt).toLocaleString('uz-UZ', {timeZone:'Asia/Tashkent'})));
+    }
     const details = el('details'); details.append(el('summary', 'Chekni ko‘rish')); card.append(details);
     let loaded=false, loading=false;
     details.ontoggle=async()=>{
