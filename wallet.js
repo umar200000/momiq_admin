@@ -90,7 +90,7 @@ function renderWalletSettings(config) {
 function renderTopups(rows, nextCursor) {
   const panel = $('#walletPanel'); panel.replaceChildren();
   const filter = el('select'); filter.setAttribute('aria-label','Chek holati');
-  for (const [value, title] of [['pending','Kutilayotgan'],['approved','Tasdiqlangan'],['rejected','Rad etilgan'],['all','Barchasi']]) {
+  for (const [value, title] of [['pending','Kutilayotgan'],['needs_info','Aniqlashtirish kerak'],['approved','Tasdiqlangan'],['rejected','Rad etilgan'],['all','Barchasi']]) {
     const option = el('option',title); option.value=value; filter.append(option);
   }
   filter.value=topupStatus; filter.onchange=()=>{topupStatus=filter.value;openWalletAdmin('topups');}; panel.append(filter);
@@ -99,7 +99,7 @@ function renderTopups(rows, nextCursor) {
   for (const row of rows) {
     const card = el('article', undefined, 'topupCard');
     const owner = state.users.find(user => user.id === row.userId);
-    const statusLabel = {pending:'Tekshirilmoqda',approved:'Tasdiqlangan',rejected:'Rad etilgan'}[row.status] || row.status;
+    const statusLabel = {pending:'Tekshirilmoqda',needs_info:'Aniqlashtirish kerak',approved:'Tasdiqlangan',rejected:'Rad etilgan'}[row.status] || row.status;
     card.append(el('h2', walletMoney(row.amountMinor)), el('p', owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', statusLabel + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
     if (row.payerReference || row.paidAt) {
       card.append(el('h3', 'Enaga kiritgan ma’lumot (hali tekshirilmagan)'));
@@ -127,6 +127,7 @@ function renderTopups(rows, nextCursor) {
       finally { loading=false; }
     };
     if (row.reviewReason) card.append(el('p', row.reviewReason));
+    appendTopupHistory(card,row);
     if (row.status === 'pending') {
       const form = el('form');
       const received = walletField(form, 'Hisobga tushgan summa (so‘m)', 'received'); received.inputMode = 'decimal';
@@ -135,11 +136,12 @@ function renderTopups(rows, nextCursor) {
       const verified = walletField(form, 'Chek va haqiqiy tushum tekshirildi', 'verified', 'checkbox');
       const approve = el('button', 'Tasdiqlash va balansga qo‘shish');
       const reject = el('button', 'Rad etish', 'danger'); reject.type = 'button';
+      const clarify = el('button', 'Aniqlashtirish so‘rash'); clarify.type = 'button';
       const review = async decision => {
         if (!reason.value.trim()) { notice('Tekshiruv sababini yozing.'); return; }
-        approve.disabled = reject.disabled = true;
+        approve.disabled = reject.disabled = clarify.disabled = true;
         try {
-          const body = {decision, reason: reason.value.trim()};
+          const body = {decision, reason: reason.value.trim(), revision:row.revision};
           if (decision === 'approve') {
             if (!verified.checked) throw Error('Haqiqiy tushumni tekshiring.');
             body.receivedAmountMinor = parseMinor(received.value);
@@ -148,13 +150,14 @@ function renderTopups(rows, nextCursor) {
             if (!body.transferReference) throw Error('Tushum ID raqamini kiriting.');
           }
           await api('topups/' + row.id + '/review', 'POST', body);
-          await openWalletAdmin('topups'); notice(decision === 'approve' ? 'Balansga bir marta qo‘shildi.' : 'So‘rov rad etildi.');
+          await openWalletAdmin('topups'); notice(decision === 'approve' ? 'Balansga bir marta qo‘shildi.' : decision === 'request_info' ? 'Enagaga aniqlashtirish talabi yuborildi. Balans o‘zgarmadi.' : 'So‘rov rad etildi.');
         } catch (error) { notice(error.message); }
-        finally { approve.disabled = reject.disabled = false; }
+        finally { approve.disabled = reject.disabled = clarify.disabled = false; }
       };
       form.onsubmit = event => { event.preventDefault(); return review('approve'); };
       reject.onclick = () => review('reject');
-      form.append(approve, reject); card.append(form);
+      clarify.onclick = () => review('request_info');
+      form.append(approve, clarify, reject); card.append(form);
     }
     panel.append(card);
   }
@@ -166,6 +169,31 @@ function renderTopups(rows, nextCursor) {
       catch(error){notice(error.message);more.disabled=false;}
     };
   }
+}
+
+function appendTopupHistory(card,row) {
+  const history=el('details');history.append(el('summary','Tekshiruv va chek nusxalari tarixi'));card.append(history);
+  let loaded=false,loading=false,cursor=null;
+  const more=el('button','Yana yuklash');more.type='button';
+  const load=async()=>{
+    if(loading)return;loading=true;more.disabled=true;
+    try {
+      const page=await api('topups/'+row.id+'/history'+(cursor===null?'':'?before='+encodeURIComponent(cursor)));
+      more.remove?.();
+      for(const item of page.items){
+        const eventLabel={created:'Yuborilgan',migrated:'Eski yozuvdan saqlangan nusxa',request_info:'Aniqlashtirish so‘ralgan',resubmitted:'Qayta yuborilgan',approve:'Tasdiqlangan',reject:'Rad etilgan'}[item.event]||item.event;
+        const entry=el('section');entry.append(el('h3',eventLabel+' · v'+item.revision),el('p',walletMoney(item.amountMinor)+' · '+new Date(item.created).toLocaleString('uz-UZ',{timeZone:'Asia/Tashkent'})));
+        if(item.reason)entry.append(el('p',item.reason));
+        if(item.payerReference)entry.append(el('p','Enaga reference: '+item.payerReference));
+        const imageButton=el('button','Shu bosqichdagi chek');imageButton.type='button';
+        imageButton.onclick=async()=>{imageButton.disabled=true;try{const data=await api('topups/'+row.id+'/history/'+item.revision+'/receipt');entry.append(walletImage(data.receipt,'Chekning v'+item.revision+' nusxasi'));imageButton.hidden=true;}catch(error){notice(error.message);}finally{imageButton.disabled=false;}};
+        entry.append(imageButton);history.append(entry);
+      }
+      cursor=page.nextCursor;loaded=true;
+      if(cursor!==null)history.append(more);
+    }catch(error){notice(error.message);}finally{loading=false;more.disabled=false;}
+  };
+  history.ontoggle=()=>{if(history.open&&!loaded)load();};more.onclick=load;
 }
 $('#topupsNav').onclick = () => openWalletAdmin('topups');
 $('#settingsNav').onclick = () => openWalletAdmin('settings');
