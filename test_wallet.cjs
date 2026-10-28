@@ -103,3 +103,28 @@ test('history shows actor and fetches each historical image only on demand', asy
   assert.equal(calls[1].path,'topups/abc/history/0/receipt');
   assert.equal(entry.children.filter(n=>n.tag==='img').length,1);
 });
+
+
+test('settings history is read-only, paginated, retryable and renders reason as text', async()=>{
+  const {context,get,calls}=setup();
+  context.config={version:7,commissionBps:1000,minimumBalanceMinor:1500000,qrImage:null,testOnly:true,qrActive:false};
+  let page=0, fail=true;
+  context.api=async(path,method)=>{
+    calls.push({path,method});
+    if(fail){fail=false;throw Error('TEST unavailable');}
+    page++;
+    return {items:[{version:page===1?22:2,commissionBps:1234,actor:'admin',reason:'<script>TEST</script>',effectiveAt:'2026-10-28T00:00:00+00:00',testOnly:true,qrActive:false}],nextCursor:page===1?'3':null};
+  };
+  vm.runInContext('renderWalletSettings(config)',context);
+  const history=get('#walletPanel').children.find(n=>n.tag==='section');
+  const more=history.children.find(n=>n.tag==='button');
+  await more.onclick(); assert.equal(more.disabled,false); assert.ok(history.children.some(n=>n.textContent==='TEST unavailable'));
+  await more.onclick(); assert.equal(more.hidden,false);
+  await more.onclick(); assert.equal(more.hidden,true);
+  assert.equal(calls.at(-1).path,'platform-settings/history?before=3');
+  assert.ok(calls.every(c=>c.method===undefined));
+  const entries=history.children.find(n=>n.tag==='div');
+  assert.equal(entries.children.length,2);
+  assert.ok(entries.children[0].children.some(n=>n.textContent==='Sabab: <script>TEST</script>'));
+  assert.ok(entries.children[0].children.some(n=>n.textContent.includes('12.34%')));
+});

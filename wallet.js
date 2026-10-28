@@ -86,6 +86,28 @@ function renderWalletSettings(config) {
     finally { save.disabled = false; }
   };
   panel.append(form);
+  panel.append(el('p', 'Saqlangan komissiya darhol yangi narx takliflariga qo‘llanadi. Oldingi buyurtma foizi va summasi o‘zgarmaydi.'));
+  const history=el('section'); history.append(el('h3','Komissiya va QR o‘zgarishlari tarixi'));
+  const entries=el('div'), error=el('p'), more=el('button','Tarixni ko‘rish');
+  more.type='button'; let cursor=null, busy=false;
+  more.onclick=async()=>{
+    if(busy) return; busy=true; more.disabled=true; error.textContent='';
+    try {
+      const page=await api('platform-settings/history'+(cursor?'?before='+encodeURIComponent(cursor):''));
+      for(const item of page.items) {
+        const row=el('article');
+        row.append(el('strong', '#'+item.version+' — '+(item.commissionBps/100)+'%'),
+          el('p','Kuchga kirgan vaqt: '+item.effectiveAt+' · Admin: '+item.actor),
+          el('p','Sabab: '+item.reason),
+          el('p',(item.testOnly?'TEST QR':'QR')+' · '+(item.qrActive?'faol':'nofaol')));
+        entries.append(row);
+      }
+      if(!page.items.length && !cursor) entries.append(el('p','Tarix yozuvi yo‘q.'));
+      cursor=page.nextCursor; more.hidden=!cursor; more.textContent='Oldingi yozuvlar';
+    } catch(e) { error.textContent=e.message; }
+    finally { busy=false; more.disabled=false; }
+  };
+  history.append(entries,error,more); panel.append(history);
 }
 
 function renderTopups(rows, nextCursor) {
