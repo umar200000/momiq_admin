@@ -4,6 +4,7 @@ let chatReportGeneration = 0;
 const chatStatus = value => ({open:'Ko‘rib chiqilmoqda', dismissed:'Qoidabuzarlik tasdiqlanmadi', removed:'Xabar yashirildi'}[value] || value);
 
 async function openChatReports() {
+  state.panel = 'chatReports';
   const generation = ++chatReportGeneration;
   state.tab = 'profile';
   $('#accountWorkspace').hidden = true;
@@ -11,7 +12,7 @@ async function openChatReports() {
   $('#walletPanel').hidden = true;
   const panel = $('#chatPanel'); panel.hidden = false;
   $('#heading').textContent = 'Chat shikoyatlari';
-  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav']) {
+  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav']) {
     $('#'+id).classList.toggle('active', id === 'chatReportsNav');
   }
   $('#refresh').onclick = openChatReports;
