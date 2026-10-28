@@ -2,6 +2,44 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+
+test('correction is lazy, confirmed, exact on lost response and stays tied to the original credit', async()=>{
+  const {context,get,calls,notices}=setup();
+  context.crypto={randomUUID:()=> 'test-fixed-request'};
+  let fail=true, corrected=0;
+  context.api=async(path,method,body)=>{
+    calls.push({path,method,body:body&&{...body}});
+    if(method==='POST') { if(fail){fail=false;throw Error('TEST response lost');} corrected=100;return {correction:{id:'done'}}; }
+    return {originalAmountMinor:1000,correctedMinor:corrected,balanceMinor:1000-corrected,transferReference:'TEST-XOLIS',items:corrected?[{amountMinor:100,reason:'<script>TEST</script>',actor:'operator',created:'2026-10-29',originalEntryId:'original',entryId:'debit'}]:[],nextCursor:null};
+  };
+  context.rows=[{id:'test-topup',userId:'sitter',amountMinor:1000,status:'approved',created:'2026-10-29'}];
+  vm.runInContext('renderTopups(rows)',context);
+  assert.equal(calls.length,0);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article');
+  const details=card.children.find(n=>n.tag==='details'&&n.children[0].textContent.includes('Tushumni tuzatish'));
+  details.open=true;await details.ontoggle();
+  const content=details.children.find(n=>n.tag==='div');
+  const form=content.children.find(n=>n.tag==='form');
+  const fields=Object.fromEntries(form.children.filter(n=>n.tag==='label').map(n=>[n.children[0].name,n.children[0]]));
+  fields.correctionAmount.value='1';fields.correctionReason.value='<script>TEST</script>';
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(calls.filter(c=>c.method==='POST').length,0);
+  fields.correctionConfirmed.checked=true;
+  fields.correctionAmount.value='11';await form.onsubmit({preventDefault(){}});
+  assert.equal(calls.filter(c=>c.method==='POST').length,0);
+  fields.correctionAmount.value='1';await form.onsubmit({preventDefault(){}});
+  assert.equal(fields.correctionAmount.disabled,true);
+  // Even a programmatic field change cannot alter the uncertain pending request.
+  fields.correctionAmount.value='2';await form.onsubmit({preventDefault(){}});
+  const posts=calls.filter(c=>c.method==='POST');
+  assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);
+  assert.equal(posts[0].body.amountMinor,100);assert.equal(posts[0].body.expectedCorrectedMinor,0);
+  assert.equal(posts[0].path,'topups/test-topup/corrections');
+  assert.ok(notices.includes('Tuzatish saqlandi.'));
+  const history=content.children.find(n=>n.tag==='div');
+  assert.ok(history.children[0].children.some(n=>n.textContent==='<script>TEST</script>'));
+  assert.ok(history.children[0].children.some(n=>n.textContent.includes('original')&&n.textContent.includes('debit')));
+});
 function setup() {
   class Element {
     constructor(tag, text = '') { this.tag = tag; this.textContent = text; this.children = []; this.value = ''; this.classList = {toggle(){}}; }

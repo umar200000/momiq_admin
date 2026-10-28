@@ -151,6 +151,7 @@ function renderTopups(rows, nextCursor) {
     };
     if (row.reviewReason) card.append(el('p', row.reviewReason));
     appendTopupHistory(card,row);
+    if (row.status === 'approved') appendTopupCorrections(card,row);
     if (row.status === 'pending') {
       const form = el('form');
       const received = walletField(form, 'Hisobga tushgan summa (so‘m)', 'received'); received.inputMode = 'decimal';
@@ -218,6 +219,56 @@ function appendTopupHistory(card,row) {
     }catch(error){notice(error.message);}finally{loading=false;more.disabled=false;}
   };
   history.ontoggle=()=>{if(history.open&&!loaded)return load();};more.onclick=load;
+}
+function appendTopupCorrections(card,row) {
+  const details=el('details'); details.append(el('summary','Tushumni tuzatish va tuzatishlar tarixi')); card.append(details);
+  const content=el('div'), error=el('p'), retry=el('button','Qayta yuklash');
+  retry.type='button'; details.append(content,error,retry);
+  let loaded=false, busy=false;
+  const load=async()=>{
+    if(busy)return; busy=true; retry.disabled=true; error.textContent='';
+    try {
+      const page=await api('topups/'+row.id+'/corrections');
+      content.replaceChildren(el('p','Asl tushum: '+walletMoney(page.originalAmountMinor)+' · Tuzatilgan: '+walletMoney(page.correctedMinor)),
+        el('p','Joriy balans: '+walletMoney(page.balanceMinor)+' · Tushum ID: '+page.transferReference),
+        el('p','Bu xato kiritilgan tushumni kamaytiradi. Pul kartaga qaytarilmaydi. Qoldiq yetmasa amal rad etiladi; yordam xizmati orqali ko‘rib chiqing.'));
+      const history=el('div'); content.append(history);
+      const append=items=>{for(const item of items){const entry=el('article');entry.append(
+        el('strong','−'+walletMoney(item.amountMinor)),el('p',item.reason),
+        el('p','Admin: '+item.actor+' · '+item.created),el('p','Asl jurnal: '+item.originalEntryId+' · Tuzatish: '+item.entryId));history.append(entry);}};
+      append(page.items);
+      let cursor=page.nextCursor;
+      const more=el('button','Oldingi tuzatishlar'); more.type='button'; more.hidden=!cursor; content.append(more);
+      more.onclick=async()=>{if(more.disabled)return;more.disabled=true;try{const older=await api('topups/'+row.id+'/corrections?before='+encodeURIComponent(cursor));append(older.items);cursor=older.nextCursor;more.hidden=!cursor;}catch(e){error.textContent=e.message;}finally{more.disabled=false;}};
+      if(page.correctedMinor<page.originalAmountMinor) {
+        const form=el('form');
+        const amount=walletField(form,'Kamaytiriladigan summa (so‘m)','correctionAmount'); amount.inputMode='decimal';
+        const reason=walletField(form,'Tuzatish sababi (enagaga ham ko‘rinadi)','correctionReason'); reason.maxLength=1000;
+        const confirmed=walletField(form,'Asl tushum, summa va sababni tekshirdim','correctionConfirmed','checkbox');
+        const save=el('button','Balansni shu summaga kamaytirish'); form.append(save); content.append(form);
+        let pending=null, sending=false;
+        form.onsubmit=async event=>{
+          event.preventDefault(); if(sending)return;
+          try {
+            if(!pending) {
+              if(!confirmed.checked||!reason.value.trim())throw Error('Sababni yozing va tekshirganingizni tasdiqlang.');
+              const value=parseMinor(amount.value);
+              if(value>page.originalAmountMinor-page.correctedMinor)throw Error('Summa asl tushumning tuzatilmagan qismidan oshmasin.');
+              pending={amountMinor:value,reason:reason.value.trim(),expectedCorrectedMinor:page.correctedMinor,requestId:crypto.randomUUID()};
+            }
+            sending=true;save.disabled=retry.disabled=true;amount.disabled=reason.disabled=confirmed.disabled=true;
+            await api('topups/'+row.id+'/corrections','POST',pending);
+            // Never re-submit a confirmed debit if the subsequent history refresh fails.
+            form.replaceChildren(el('p','Tuzatish saqlandi. Balans kamaytirildi.'));
+            loaded=false;await load();notice('Tuzatish saqlandi.');
+          } catch(e){error.textContent=e.message;save.textContent=pending?'Xuddi shu tuzatishni qayta yuborish':'Balansni shu summaga kamaytirish';}
+          finally{sending=false;save.disabled=retry.disabled=false;}
+        };
+      }
+      loaded=true;
+    }catch(e){error.textContent=e.message;}finally{busy=false;retry.disabled=false;}
+  };
+  details.ontoggle=()=>{if(details.open&&!loaded)return load();}; retry.onclick=load;
 }
 $('#topupsNav').onclick = () => openWalletAdmin('topups');
 $('#settingsNav').onclick = () => openWalletAdmin('settings');
