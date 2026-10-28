@@ -22,6 +22,14 @@ test('financial input uses exact hundredths and validates bounds', () => {
   assert.equal(vm.runInContext("parseMinor('0',true)",context),0);
   for(const value of ['0','-1','1e3','1.001','1000000001']) assert.throws(()=>vm.runInContext(`parseMinor('${value}')`,context));
 });
+
+test('topup identifies its owner without depending on the loaded accounts page', () => {
+  const {context,get}=setup();
+  context.rows=[{id:'abc',revision:0,userId:'sitter',owner:{name:'TEST Owner',phone:'998000000001'},amountMinor:1500000,status:'rejected',created:'2026-10-27'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const text=node=>[node.textContent,...node.children.map(text)].join(' ');
+  assert.match(text(get('#walletPanel')),/TEST Owner · \+998000000001/);
+});
 test('approval requires verified matching incoming funds; rejection needs only reason', async () => {
   const {context,get,calls,notices} = setup();
   context.rows=[{id:'abc',revision:0,userId:'sitter',amountMinor:1500001,status:'pending',created:'2026-10-27',receipt:'test'}];

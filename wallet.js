@@ -123,7 +123,7 @@ function renderTopups(rows, nextCursor) {
     const card = el('article', undefined, 'topupCard');
     const owner = state.users.find(user => user.id === row.userId);
     const statusLabel = {pending:'Tekshirilmoqda',needs_info:'Aniqlashtirish kerak',approved:'Tasdiqlangan',rejected:'Rad etilgan'}[row.status] || row.status;
-    card.append(el('h2', walletMoney(row.amountMinor)), el('p', owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', statusLabel + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
+    card.append(el('h2', walletMoney(row.amountMinor)), el('p', row.owner ? row.owner.name + ' · +' + row.owner.phone : owner ? name(owner) + ' · +' + owner.phone : row.userId), el('p', statusLabel + ' · ' + new Date(row.created).toLocaleString('uz-UZ')));
     if (row.payerReference || row.paidAt) {
       card.append(el('h3', 'Enaga kiritgan ma’lumot (hali tekshirilmagan)'));
       if (row.payerReference) card.append(el('p', 'Chekdagi operatsiya ID: ' + row.payerReference));
