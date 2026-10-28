@@ -60,6 +60,8 @@ async function adminBookingVideos(box,identity,current,day=null){
       for(const slot of ['morning','evening']){
         const item=result.items.find(v=>v.petId===pet.id&&v.slot===slot),title=slot==='morning'?'Ertalab':'Kechqurun';
         card.append(el('p',title+(item?' · '+item.durationMs/1000+' soniya':' · Video yuborilmagan')));
+        const followup=(result.followups||[]).find(r=>r.slot===slot),note=followup?.explanations.find(n=>n.petId===pet.id);
+        if(note)card.append(el('p',(note.emergency?'Enaga favqulodda holat bildirdi: ':'Enaga bildirgan sabab: ')+note.reason+' · '+note.created));
         if(!item)continue;
         if(item.available===false){card.append(el('p','Saqlash muddati tugagan','meta'));continue;}
         const player=el('video',undefined,'reportVideo'),base='/api/admin/bookings/'+encodeURIComponent(identity)+'/videos/'+encodeURIComponent(item.id);

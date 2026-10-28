@@ -44,3 +44,13 @@ test('booking details are text-only and offer no generic status or money editor'
   const dispute=panel.children.find(n=>n.textContent.startsWith('Nizoni ko‘rish:'));dispute.onclick();
   assert.equal(calls.at(-1).dispute,page.id);
 });
+
+ test('missing video explanation is labelled a sitter claim and rendered as text',async()=>{
+  const payload={day:'2026-10-28',policy:{today:'2026-10-28'},pets:[{id:'cat',name:'TEST'}],items:[],followups:[{slot:'morning',explanations:[{petId:'cat',reason:'<img onerror=evil>',emergency:true,created:'TEST'}]}]};
+  const {context,get}=setup(()=>payload);context.box=get('videoBox');context.current=()=>true;
+  await vm.runInContext("adminBookingVideos(box,'"+'a'.repeat(32)+"',current)",context);
+  const card=context.box.children.find(n=>n.tag==='article');
+  assert.ok(card.children.some(n=>n.textContent.includes('Enaga favqulodda holat bildirdi: <img onerror=evil>')));
+  assert.ok(card.children.some(n=>n.textContent.includes('Video yuborilmagan')));
+  assert.equal(card.children.filter(n=>n.tag==='video').length,0);
+});
