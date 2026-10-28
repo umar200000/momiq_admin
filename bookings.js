@@ -42,6 +42,33 @@ function renderAdminBooking(panel,page,current){
   adminBookingTimeline(history,'bookings/'+page.id+'/history',page.history,current,false);
   const care=el('button','Parvarish tarixini ochish','secondary'),careBox=el('div');panel.append(care,careBox);
   care.onclick=async()=>{care.disabled=true;try{const result=await api('bookings/'+page.id+'/care');if(!current())return;careBox.replaceChildren(el('p','Parvarish yozuvlari egasi/enaga bildirgan ma’lumotlar; mustaqil xizmat tasdig‘i emas.','meta'));adminBookingTimeline(careBox,'bookings/'+page.id+'/care',result,current,true);care.hidden=true;}catch(e){if(current())notice(e.message);}finally{care.disabled=false;}};
+  const videos=el('button','Video hisobotlarni ko‘rish','secondary'),videoBox=el('div');panel.append(videos,videoBox);
+  videos.onclick=()=>adminBookingVideos(videoBox,page.id,current);
+}
+async function adminBookingVideos(box,identity,current,day=null){
+  const turn=(box.videoGeneration||0)+1;box.videoGeneration=turn;
+  const live=()=>current()&&box.videoGeneration===turn;
+  box.replaceChildren(el('p','Videolar yuklanmoqda…'));
+  try{
+    const result=await api('bookings/'+encodeURIComponent(identity)+'/videos'+(day?'?day='+encodeURIComponent(day):''));
+    if(!live())return;
+    const label=el('label','Video sanasi · Toshkent'),date=el('input');date.type='date';date.value=result.day;date.max=result.policy.today;date.ariaLabel='Video sanasi';label.append(date);
+    date.onchange=()=>adminBookingVideos(box,identity,current,date.value||null);
+    box.replaceChildren(label,el('p','Ko‘rish auditda qayd etiladi. Video enaga taqdim etgan hisobot; mustaqil xizmat tasdig‘i emas. Buyurtma tugagach 30 kun, ochiq nizo bo‘lsa yopilganidan keyin yana 30 kun saqlanadi.','meta'));
+    for(const pet of result.pets){
+      const card=el('article',undefined,'walletRequest');card.append(el('h3',pet.name));
+      for(const slot of ['morning','evening']){
+        const item=result.items.find(v=>v.petId===pet.id&&v.slot===slot),title=slot==='morning'?'Ertalab':'Kechqurun';
+        card.append(el('p',title+(item?' · '+item.durationMs/1000+' soniya':' · Video yuborilmagan')));
+        if(!item)continue;
+        if(item.available===false){card.append(el('p','Saqlash muddati tugagan','meta'));continue;}
+        const player=el('video',undefined,'reportVideo'),base='/api/admin/bookings/'+encodeURIComponent(identity)+'/videos/'+encodeURIComponent(item.id);
+        player.controls=true;player.preload='none';player.playsInline=true;player.src=base+'/playback';player.poster=base+'/poster';
+        player.onerror=()=>{if(live())notice('Video ochilmadi. Sahifani yangilang yoki qayta kiring.');};card.append(player);
+      }
+      box.append(card);
+    }
+  }catch(e){if(live()){const retry=el('button','Qayta urinish','secondary');retry.onclick=()=>adminBookingVideos(box,identity,current,day);box.replaceChildren(el('p',e.message),retry);}}
 }
 function adminBookingTimeline(box,path,page,current,care){
   const list=el('div');box.append(list);const seen=new Set();

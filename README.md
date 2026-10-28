@@ -26,3 +26,6 @@ Mijozlar and Enagalar filter durable role memberships; dual-role accounts appear
 
 
 Chat reports: the Chat shikoyatlari section lists paginated incoming-message reports. Evidence and image access are explicit and audited; the operator sees only the reported message, not the entire conversation. A decision requires the loaded revision and a reason. Hide preserves original evidence while removing participant text/image access; dismiss leaves the message visible. Stale/parallel review cannot overwrite another decision. Current admin sessions still share existing administrator access; separate moderator/finance/support permissions remain a production gate. Run `node --test test_admin.cjs test_revision.cjs test_wallet.cjs test_chat.cjs`.
+
+
+Booking details now open daily video reports with a date filter. Same-origin HttpOnly admin cookies authorize poster/playback requests; no token appears in URLs. Every access is audited by the server, and expired media has no player. This does not add generic upload, deletion, refund or status mutation. Personal operator permissions/MFA remain the separate M092 release gate.

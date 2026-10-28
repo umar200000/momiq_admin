@@ -13,6 +13,19 @@ test('failed booking list exposes retry, never a fake empty result',async()=>{
   assert.match(text(get('#chatPanel')),/Qayta urinish/);
   assert.doesNotMatch(text(get('#chatPanel')),/mos buyurtma yo‘q/);
 });
+
+test('video oversight uses same-origin cookie media and no player for expired reports',async()=>{
+  const payload={day:'2026-10-28',policy:{today:'2026-10-28'},pets:[{id:'cat',name:'<script>TEST</script>'}],items:[
+    {id:'b'.repeat(32),petId:'cat',slot:'morning',durationMs:10000,available:true},
+    {id:'c'.repeat(32),petId:'cat',slot:'evening',durationMs:12000,available:false}]};
+  const {context,get,calls}=setup(()=>payload);context.box=get('videoBox');context.current=()=>true;
+  await vm.runInContext("adminBookingVideos(box,'"+'a'.repeat(32)+"',current)",context);
+  const card=context.box.children.find(n=>n.tag==='article'),players=card.children.filter(n=>n.tag==='video');
+  assert.equal(players.length,1);assert.match(players[0].src,/^\/api\/admin\/bookings\/[a-f0-9]+\/videos\/[a-f0-9]+\/playback$/);
+  assert.equal(players[0].preload,'none');assert.equal(players[0].controls,true);assert.ok(!players[0].src.includes('token'));
+  assert.ok(card.children.some(n=>n.textContent==='Saqlash muddati tugagan'));assert.equal(calls[0].method,'GET');
+  assert.equal(card.children[0].textContent,'<script>TEST</script>');
+});
 test('late list result cannot replace another admin panel',async()=>{
   let resolve;const {context,get}=setup(()=>new Promise(r=>resolve=r));
   const request=vm.runInContext('openAdminBookings()',context);
