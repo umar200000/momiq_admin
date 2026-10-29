@@ -29,6 +29,13 @@ function renderSupportThread(panel,page,current=()=>true){
   const row=page.ticket;
   panel.append(el('h2',row.subject),el('p',row.topic+' · '+row.status+' · v'+row.revision),el('p','Murojaat #'+row.id,'meta'));
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
+  if(page.target){
+    const target=page.target,box=el('section');
+    box.append(el('h3',target.kind==='review'?'Sharhga shikoyat':'E’lon/profilga shikoyat'),el('p','Manba #'+target.id+' · '+target.capturedAt));
+    box.append(el('p','Yuborilgan paytdagi ommaviy matn nusxasi. Bu rasm/video arxivi emas. Murojaatga javob berish yoki uni yopish kontentni yashirmaydi.','meta'));
+    box.append(el('pre',JSON.stringify(target.snapshot,null,2)));
+    panel.append(box);
+  }
   const history=el('div');panel.append(history);let messages=page.items, cursor=page.nextCursor;
   const draw=()=>{history.replaceChildren();for(const m of messages){const card=el('article',undefined,'walletRequest');card.append(el('b',m.authorRole==='support'?'Momiq yordam xizmati':'Murojaat egasi'),el('p',m.text),el('p',m.created+' · '+m.action,'meta'));history.append(card);
     if(m.hasImage){const image=el('button','Maxfiy rasmni ochish','secondary');card.append(image);image.onclick=async()=>{image.disabled=true;try{const result=await api('support/'+row.id+'/messages/'+m.id+'/image');if(!current())return;const img=el('img');img.src=source(result.image);img.alt='Murojaatga biriktirilgan rasm';img.style.maxWidth='100%';card.append(img);image.hidden=true;}catch(e){notice(e.message);}finally{image.disabled=false;}};}
