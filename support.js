@@ -6,7 +6,7 @@ async function openSupport(identity=null) {
   for(const id of ['accountWorkspace','accountStats','walletPanel'])$('#'+id).hidden=true;
   const panel=$('#chatPanel');panel.hidden=false;
   $('#heading').textContent='Yordam murojaatlari';
-  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav'])$('#'+id).classList.toggle('active',id==='supportNav');
+  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav','workQueueNav'])$('#'+id).classList.toggle('active',id==='supportNav');
   $('#refresh').onclick=()=>openSupport(identity);
   panel.replaceChildren(el('p','Yuklanmoqda…'));
   const current=()=>generation===supportGeneration&&state.panel==='support'&&!panel.hidden;

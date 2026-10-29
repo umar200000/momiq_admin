@@ -54,3 +54,10 @@ test('moderator decision requires reason and preserves stale form for explicit r
   await form.onsubmit(event);
   assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body),[posted.body,posted.body]);
 });
+
+test('assignment source opens the exact report and stale list responses cannot replace another panel',async()=>{
+  const s=setup();await vm.runInContext("openChatReports('7')",s.context);assert.equal(s.calls.at(-1).path,'chat-reports/7/evidence');
+  assert.match(s.get('#chatPanel').children[1].children[0].textContent,/#7/);
+  let finish;s.context.api=()=>new Promise(resolve=>finish=resolve);const pending=vm.runInContext('openChatReports()',s.context);
+  s.context.state.panel='workQueue';s.get('#chatPanel').replaceChildren();finish({items:[],nextCursor:null});await pending;assert.equal(s.get('#chatPanel').children.length,0);
+});

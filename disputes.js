@@ -5,7 +5,7 @@ function disputeShell(title){
   for(const id of ['accountWorkspace','accountStats','walletPanel'])$('#'+id).hidden=true;
   const panel=$('#chatPanel');panel.hidden=false;panel.replaceChildren(el('p','Yuklanmoqda…'));
   $('#heading').textContent=title;
-  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav'])$('#'+id).classList.toggle('active',id==='disputesNav');
+  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav','workQueueNav'])$('#'+id).classList.toggle('active',id==='disputesNav');
   return panel;
 }
 async function openDisputes(identity=null,filter='open'){

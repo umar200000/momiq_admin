@@ -35,7 +35,7 @@ async function openMetrics(){
   const generation=++metricsGeneration,panel=$('#chatPanel');state.panel='metrics';state.tab='profile';
   for(const id of ['accountWorkspace','accountStats','walletPanel'])$('#'+id).hidden=true;
   panel.hidden=false;panel.replaceChildren(el('p','Hisobot yuklanmoqda…'));$('#heading').textContent='Ko‘rsatkichlar';
-  for(const id of ['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings','metrics'])$('#'+id+'Nav').classList.toggle('active',id==='metrics');
+  for(const id of ['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings','metrics','workQueue'])$('#'+id+'Nav').classList.toggle('active',id==='metrics');
   $('#refresh').onclick=openMetrics;
   const current=()=>generation===metricsGeneration&&state.panel==='metrics'&&!panel.hidden;
   try{const data=await api('metrics');if(current())renderMetrics(panel,data);}

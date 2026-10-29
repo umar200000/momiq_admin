@@ -3,7 +3,7 @@ let chatReportStatus = 'open';
 let chatReportGeneration = 0;
 const chatStatus = value => ({open:'Ko‘rib chiqilmoqda', dismissed:'Qoidabuzarlik tasdiqlanmadi', removed:'Xabar yashirildi'}[value] || value);
 
-async function openChatReports() {
+async function openChatReports(identity=null) {
   state.panel = 'chatReports';
   const generation = ++chatReportGeneration;
   state.tab = 'profile';
@@ -12,14 +12,19 @@ async function openChatReports() {
   $('#walletPanel').hidden = true;
   const panel = $('#chatPanel'); panel.hidden = false;
   $('#heading').textContent = 'Chat shikoyatlari';
-  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav']) {
+  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav','workQueueNav']) {
     $('#'+id).classList.toggle('active', id === 'chatReportsNav');
   }
-  $('#refresh').onclick = openChatReports;
+  $('#refresh').onclick = ()=>openChatReports(identity);
+  const current=()=>generation===chatReportGeneration&&state.panel==='chatReports'&&!panel.hidden;
   panel.replaceChildren(el('p','Yuklanmoqda…'));
   try {
+    if(identity){
+      const data=await api('chat-reports/'+encodeURIComponent(identity)+'/evidence');if(!current())return;
+      panel.replaceChildren();const back=el('button','Shikoyatlar ro‘yxati','secondary');back.onclick=()=>openChatReports();panel.append(back);renderChatReport(panel,data.report);return;
+    }
     const page = await api('chat-reports?status='+chatReportStatus);
-    if (generation !== chatReportGeneration || panel.hidden) return;
+    if (!current()) return;
     panel.replaceChildren(el('h2','Chat shikoyatlari'), el('p','Dalilni ochish auditga yoziladi. Xabarni yashirish asl dalilni o‘chirmaydi.','meta'));
     const filter = el('select'); filter.setAttribute('aria-label','Shikoyat holati');
     for (const value of ['open','removed','dismissed','all']) {const option=el('option',value==='all'?'Barchasi':chatStatus(value));option.value=value;filter.append(option);}
@@ -31,8 +36,8 @@ async function openChatReports() {
     if (!page.items.length) list.append(el('p','Hozircha shikoyat yo‘q.'));
     let cursor=page.nextCursor;
     const more=el('button','Yana','secondary');more.hidden=!cursor;panel.append(more);
-    more.onclick=async()=>{more.disabled=true;try{const next=await api('chat-reports?status='+chatReportStatus+'&before='+encodeURIComponent(cursor));if(generation!==chatReportGeneration||panel.hidden)return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){notice(e.message);}finally{more.disabled=false;}};
-  } catch(error) {if(generation===chatReportGeneration&&!panel.hidden)panel.replaceChildren(el('p',error.message));}
+    more.onclick=async()=>{more.disabled=true;try{const next=await api('chat-reports?status='+chatReportStatus+'&before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){notice(e.message);}finally{more.disabled=false;}};
+  } catch(error) {if(current())panel.replaceChildren(el('p',error.message));}
 }
 
 function renderChatReport(list, row) {
@@ -64,7 +69,7 @@ function renderChatReport(list, row) {
           try {
             await api('chat-reports/'+row.id+'/review','POST',{revision:data.report.revision,decision,reason:reason.value.trim()});
             notice('Qaror saqlandi.');
-            if(!$('#chatPanel').hidden)await openChatReports();
+            if(state.panel==='chatReports'&&!$('#chatPanel').hidden)await openChatReports();
           } catch(e){notice(e.message);} finally{remove.disabled=dismiss.disabled=reason.disabled=false;}
         };
       }
@@ -72,4 +77,4 @@ function renderChatReport(list, row) {
     } catch(error){notice(error.message);}finally{open.disabled=false;}
   };
 }
-$('#chatReportsNav').onclick=openChatReports;
+$('#chatReportsNav').onclick=()=>openChatReports();
