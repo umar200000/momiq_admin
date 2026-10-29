@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-function setup(target=null){
+function setup(target=null,canResolve=true){
   class Element{constructor(tag,text){this.tag=tag;this.textContent=text||'';this.children=[];this.value='';this.hidden=false;this.disabled=false;this.style={};this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[],notices=[];const get=id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);};let fail=false;
-  const page={target,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
+  const page={target,canResolve,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
   const context=vm.createContext({state:{panel:'support'},chatReportGeneration:0,$:get,el:(tag,text)=>new Element(tag,text),crypto:require('node:crypto').webcrypto,source:v=>'data:image/png;base64,'+v,notice:t=>notices.push(t),readImage:async()=>null,api:async(path,method='GET',body)=>{calls.push({path,method,body});if(method==='POST'&&fail)throw Error('TEST response lost');return path.endsWith('/image')?{image:'TEST'}:page;},page});
   vm.runInContext(fs.readFileSync('support.js','utf8'),context);vm.runInContext("renderSupportThread($('#chatPanel'),page)",context);
   return {get,calls,notices,context,setFail:v=>fail=v};
@@ -31,4 +31,16 @@ test('reported source identity and historical text are inert and do not trigger 
   assert.match(box.children[1].textContent,/#19/);
   const snapshot=box.children.find(n=>n.tag==='pre');assert.deepEqual(JSON.parse(snapshot.textContent),target.snapshot);
   assert.equal(snapshot.children.length,0);assert.equal(calls.length,0);
+});
+test('appeal decision is inert and support cannot select resolve',()=>{
+  const target={kind:'listing',id:'TEST:boarding',purpose:'appeal',snapshot:{reason:'<script>TEST</script>',sourceRevision:3}};
+  for(const allowed of [false,true]){
+    const {get,calls}=setup(target,allowed),panel=get('#chatPanel');
+    const box=panel.children.find(n=>n.tag==='section');
+    assert.equal(box.children[0].textContent,'Qarorni qayta ko‘rib chiqish');
+    assert.deepEqual(JSON.parse(box.children.find(n=>n.tag==='pre').textContent),target.snapshot);
+    const form=panel.children.find(n=>n.tag==='form');
+    assert.deepEqual(form.children[2].children.map(n=>n.value),allowed?['reply','resolve']:['reply']);
+    assert.equal(calls.length,0);
+  }
 });

@@ -31,8 +31,8 @@ function renderSupportThread(panel,page,current=()=>true){
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
   if(page.target){
     const target=page.target,box=el('section');
-    box.append(el('h3',target.kind==='review'?'Sharhga shikoyat':'E’lon/profilga shikoyat'),el('p','Manba #'+target.id+' · '+target.capturedAt));
-    box.append(el('p','Yuborilgan paytdagi ommaviy matn nusxasi. Bu rasm/video arxivi emas. Murojaatga javob berish yoki uni yopish kontentni yashirmaydi.','meta'));
+    box.append(el('h3',target.purpose==='appeal'?'Qarorni qayta ko‘rib chiqish':target.kind==='review'?'Sharhga shikoyat':'E’lon/profilga shikoyat'),el('p','Manba #'+target.id+' · '+target.capturedAt));
+    box.append(el('p',target.purpose==='appeal'?'Yuborilgan paytdagi qaror nusxasi. Yakuniy javobni administrator yozadi. Yopish kontentni avtomatik tiklamaydi; ko‘rinish qarori tegishli moderatsiya bo‘limida alohida audit bilan bajariladi.':'Yuborilgan paytdagi ommaviy matn nusxasi. Bu rasm/video arxivi emas. Murojaatga javob berish yoki uni yopish kontentni yashirmaydi.','meta'));
     box.append(el('pre',JSON.stringify(target.snapshot,null,2)));
     panel.append(box);
   }
@@ -44,7 +44,7 @@ function renderSupportThread(panel,page,current=()=>true){
   older.onclick=async()=>{older.disabled=true;try{const next=await api('support/'+row.id+'?before='+encodeURIComponent(cursor));if(!current())return;const ids=new Set(messages.map(m=>m.id));messages=[...next.items.filter(m=>!ids.has(m.id)),...messages];cursor=next.nextCursor;older.hidden=!cursor;draw();}catch(e){notice(e.message);}finally{older.disabled=false;}};
   const form=el('form'),label=el('label','Javob yoki yopish sababi'),body=el('textarea');body.maxLength=4000;body.required=true;label.append(body);
   const attachment=el('input');attachment.type='file';attachment.accept='image/png,image/jpeg,image/webp';attachment.setAttribute('aria-label','Rasm biriktirish');
-  const action=el('select');for(const [v,t] of [['reply','Javob yuborish'],['resolve','Sabab bilan yopish']]){const option=el('option',t);option.value=v;action.append(option);}action.value='reply';
+  const action=el('select');for(const [v,t] of [['reply','Javob yuborish'],...(page.canResolve===false?[]:[['resolve','Sabab bilan yopish']])]){const option=el('option',t);option.value=v;action.append(option);}action.value='reply';
   let image=null,pending=null,picking=false;
   const send=el('button','Yuborish');
   attachment.onchange=async()=>{picking=true;send.disabled=true;try{image=attachment.files[0]?await readImage(attachment.files[0]):null;}catch(e){image=null;attachment.value='';notice(e.message);}finally{picking=false;send.disabled=false;}};
