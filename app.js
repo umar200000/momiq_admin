@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let authGeneration=0,accountRenderGeneration=0,messageRenderGeneration=0;
+let authGeneration=0,accountRenderGeneration=0,messageRenderGeneration=0,authPending=false;
 function accountViewScope(){
   const auth=authGeneration,render=accountRenderGeneration,detail=state.detailVersion,selected=state.selected,section=state.section,tab=state.tab;
   return ()=>auth===authGeneration&&render===accountRenderGeneration&&detail===state.detailVersion&&selected===state.selected&&section===state.section&&tab===state.tab&&state.panel==='accounts'&&!$('#app').hidden;
@@ -215,8 +215,26 @@ function drawMessages(scroll=false){
   }
   box.scrollTop=scroll||wasBottom?box.scrollHeight:previous;
 }
-$('#loginForm').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await api('login','POST',{username:e.target.username.value,password:e.target.password.value});e.target.password.value='';await startAdmin()}catch(e){notice(e.message)}finally{b.disabled=false}};
-$('#logout').onclick=async()=>{try{await api('logout','POST',{});resetAdminView()}catch(e){notice(e.message)}};
+function authFailureIsCurrent(generation,error){
+  return generation===authGeneration||(error.status===401&&generation+1===authGeneration&&state.panel==='signed-out');
+}
+$('#loginForm').onsubmit=async e=>{
+  e.preventDefault();if(authPending)return;
+  authPending=true;resetAdminView();const generation=authGeneration;
+  const form=e.target,b=form.querySelector('button'),logout=$('#logout');
+  const credentials={username:form.username.value,password:form.password.value};
+  form.password.value='';b.disabled=logout.disabled=true;
+  try{await api('login','POST',credentials);if(generation===authGeneration)await startAdmin();}
+  catch(error){if(authFailureIsCurrent(generation,error))notice(error.message);}
+  finally{authPending=false;b.disabled=logout.disabled=false;}
+};
+$('#logout').onclick=async()=>{
+  if(authPending)return;authPending=true;
+  const generation=authGeneration,button=$('#logout');button.disabled=true;
+  try{await api('logout','POST',{});if(generation===authGeneration)resetAdminView();}
+  catch(error){if(authFailureIsCurrent(generation,error))notice(error.message);}
+  finally{authPending=false;button.disabled=false;}
+};
 let indexSearchTimer;$('#refresh').onclick=()=>load();$('#search').oninput=()=>{renderList();clearTimeout(indexSearchTimer);indexSearchTimer=setTimeout(()=>load(),300);};$('#accountStatus').onchange=()=>load();$('#listingService').onchange=()=>load();
 function nav(section){$('#workQueueNav').classList.toggle('active',false);$('#bookingsNav').classList.toggle('active',false);$('#disputesNav').classList.toggle('active',false);state.panel='accounts';state.detailRecord=null;++state.detailVersion;$('#supportNav').classList.toggle('active',false);$('#reviewsNav').classList.toggle('active',false);$('#chatPanel').hidden=true;$('#chatReportsNav').classList.toggle('active',false);$('#walletPanel').hidden=true;$('#accountWorkspace').hidden=false;$('#accountStats').hidden=false;$('#metricsNav').classList.toggle('active',false);$('#topupsNav').classList.toggle('active',false);$('#settingsNav').classList.toggle('active',false);$('#refresh').onclick=()=>load();state.section=section;state.tab='profile';state.selected=null;state.messages=[];$('#search').value='';$('#heading').textContent=titles[section];for(const [id,key]of [['usersNav','customer'],['sittersNav','sitter'],['listingsNav','listings']])$('#'+id).classList.toggle('active',section===key);configureIndexFilters();renderList();renderDetail();return load()}
 $('#usersNav').onclick=()=>nav('customer');$('#sittersNav').onclick=()=>nav('sitter');$('#listingsNav').onclick=()=>nav('listings');
