@@ -44,3 +44,6 @@ Delayed legacy reply, attachment picker and transcript polling results are bound
 
 
 Profile saves and block/unblock actions require an internal audit reason. The paired backend atomically records the real operator and bounded before/after state; it rejects old forms that omit the reason. Legacy message deletion also requires a reason and explains that stored text/image cannot be restored; a retry does not create a second deletion audit. This does not replace the newer chat-report evidence/appeal workflow.
+
+
+`release-contract.json` declares backend contract 1 for release compatibility checks. The backend records the exact admin commit used in its CI fixture. Runtime deployment checks the declared contract and required assets before switching; initial paired rollout and installation of the privileged host script remain separate infrastructure work. A breaking API/UI change requires an explicit contract/version rollout, not silently changing this metadata to bypass the check.
