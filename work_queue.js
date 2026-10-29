@@ -18,7 +18,7 @@ async function openWorkQueue(kind=null,filter='all',target=null){
   try{
     if(target){
       const data=await api(workPath(kind,target));if(!current())return;
-      const operators=role==='administrator'&&data.source.active?await api('work-queue/operators?kind='+kind):{items:[]};if(!current())return;
+      const operators=role==='administrator'&&data.source.active?await api('work-queue/operators?kind='+kind):role==='support'&&data.canEscalate?await api(workPath(kind,target)+'/escalation-operators'):{items:[]};if(!current())return;
       panel.replaceChildren();const back=el('button','Ishlar ro‘yxati','secondary');back.onclick=()=>openWorkQueue(kind,filter);panel.append(back);
       renderWorkDetail(panel,data,operators.items,current,()=>openWorkQueue(kind,filter,target));return;
     }
@@ -40,6 +40,7 @@ function renderWorkDetail(panel,data,operators,current,reload){
   sourceButton.onclick=async()=>{if(!current())return;if(kind==='support')return openSupport(row.target);if(kind==='chat_report')return openChatReports(row.target);await nav('listings');if(state.panel==='accounts'&&state.section==='listings')await select(row.target);};
   if(!row.active)panel.append(el('p','Ish yopilgan. Biriktirish tarixi saqlanadi.'));
   const admin=state.operator.role==='administrator';
+  if(!admin&&state.operator.role==='support'&&data.canEscalate)renderWorkEscalation(panel,data,operators,current,reload);
   if(row.active&&(admin||!assignment.assignee)){
     const form=el('form'),person=el('select'),due=el('input'),reason=el('textarea');
     const label=(text,input)=>{const node=el('label',text);node.append(input);form.append(node);};
@@ -64,9 +65,31 @@ function renderWorkDetail(panel,data,operators,current,reload){
     };
   }
   panel.append(el('h3','Biriktirish tarixi'));const history=el('div');panel.append(history);const seen=new Set();
-  const add=items=>{for(const event of items){if(seen.has(event.id))continue;seen.add(event.id);history.append(el('p',event.revision+' · '+event.actor+' · '+workDate(event.created)+' · '+event.reason),el('p',(event.before.assignee||'Biriktirilmagan')+' → '+(event.after.assignee||'Biriktirilmagan')+' · '+workDate(event.before.dueAt)+' → '+workDate(event.after.dueAt),'meta'));}};
+  const add=items=>{for(const event of items){if(seen.has(event.id))continue;seen.add(event.id);history.append(el('p',event.revision+' · '+event.actor+' · '+workDate(event.created)+(event.after.escalated?' · Administratorga yo‘naltirildi':'')+' · '+event.reason),el('p',(event.before.assignee||'Biriktirilmagan')+' → '+(event.after.assignee||'Biriktirilmagan')+' · '+workDate(event.before.dueAt)+' → '+workDate(event.after.dueAt),'meta'));}};
   add(data.items);if(!data.items.length)history.append(el('p','Hali biriktirish bo‘lmagan.'));
   let cursor=data.nextCursor;const more=el('button','Oldingi o‘zgarishlar','secondary');more.hidden=!cursor;panel.append(more);
   more.onclick=async()=>{if(more.disabled||!current())return;more.disabled=true;try{const next=await api(workPath(kind,row.target)+'?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
 }
 $('#workQueueNav').onclick=()=>openWorkQueue();
+
+function renderWorkEscalation(panel,data,operators,current,reload){
+  const {source:row,assignment}=data,form=el('form'),person=el('select'),reason=el('textarea');
+  form.append(el('h3','Administratorga yo‘naltirish'),el('p','Faqat bo‘sh yoki o‘zingizga biriktirilgan kontent murojaati. Muddat saqlanadi; yuborish qaror yoki mijozga javob emas.','meta'));
+  const label=(text,input)=>{const node=el('label',text);node.append(input);form.append(node);};
+  const empty=el('option','Administratorni tanlang');empty.value='';person.append(empty);
+  for(const operator of operators){if(operator.role!=='administrator')continue;const option=el('option',operator.username);option.value=operator.username;person.append(option);}
+  person.value='';person.required=true;label('Faol administrator',person);
+  reason.required=true;reason.maxLength=1000;label('Yo‘naltirish sababi (ichki audit)',reason);
+  const send=el('button','Administratorga yuborish');send.type='submit';form.append(send);panel.append(form);
+  if(!operators.some(o=>o.role==='administrator')){send.disabled=true;form.append(el('p','Faol administrator topilmadi. Biriktirish bajarilmadi.'));}
+  let pending=null,stale=false;
+  form.onsubmit=async event=>{
+    event.preventDefault();if(send.disabled||!current())return;if(stale)return reload();
+    if(!pending&&(!person.value||!reason.value.trim()))return;
+    pending??={revision:assignment.revision,sourceRevision:row.revision,assignee:person.value,dueAt:assignment.dueAt,reason:reason.value.trim(),requestId:crypto.randomUUID()};
+    send.disabled=true;person.disabled=reason.disabled=true;
+    try{await api(workPath('support',row.target)+'/escalate','POST',pending);if(current())await reload();}
+    catch(e){if(current()){notice(e.message);stale=[400,403,409].includes(e.status);send.textContent=stale?'Holatni qayta yuklash':'Ayni so‘rovni qayta yuborish';}}
+    finally{if(current())send.disabled=false;}
+  };
+}

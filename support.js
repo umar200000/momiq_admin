@@ -40,6 +40,10 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
       if(canResolve)box.append(el('pre',JSON.stringify(page.decisionContext.snapshot,null,2)),el('p','Yakuniy javob shu holat bilan birga saqlanadi. Qaror o‘zgarsa avval yangilang.','meta'));
       else box.append(el('p','Amaldagi qaror yuklanmagan. Yopishdan oldin panelni yangilang.','meta'));
     }
+    if(['support','administrator'].includes(state.operator?.role)){
+      const queue=el('button','Ish navbati / administratorga yo‘naltirish','secondary');
+      queue.onclick=()=>{if(current())return openWorkQueue('support','all',row.id);};box.append(queue);
+    }
     panel.append(box);
   }
   const history=el('div');panel.append(history);let messages=page.items, cursor=page.nextCursor;

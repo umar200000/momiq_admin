@@ -131,3 +131,13 @@ test('recorded appeal resolution remains inert historical text',()=>{
   const card=s.get('#chatPanel').children.find(n=>n.tag==='div').children[0],pre=card.children.find(n=>n.tag==='pre');
   assert.equal(pre.children.length,0);assert.match(pre.textContent,/<script>not HTML<\/script>/);assert.equal(s.calls.length,0);
 });
+
+test('content support handoff opens its own queue only from a current role-scoped view',async()=>{
+  const s=setup({kind:'listing',id:'abc:boarding',purpose:'appeal',capturedAt:'TEST',snapshot:{status:'rejected'}},false);
+  const opened=[];s.context.state.operator={role:'support'};s.context.openWorkQueue=(...args)=>opened.push(args);
+  const render=()=>{s.get('#chatPanel').replaceChildren();vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",s.context);};render();
+  const all=n=>[n,...n.children.flatMap(all)];let button=all(s.get('#chatPanel')).find(n=>n.textContent==='Ish navbati / administratorga yo‘naltirish');
+  await button.onclick();assert.deepEqual(opened,[['support','all','a'.repeat(32)]]);
+  s.context.live=false;await button.onclick();assert.equal(opened.length,1);
+  s.context.live=true;s.context.state.operator.role='finance';render();assert.equal(all(s.get('#chatPanel')).some(n=>n.textContent==='Ish navbati / administratorga yo‘naltirish'),false);
+});
