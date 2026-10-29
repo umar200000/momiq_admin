@@ -38,3 +38,6 @@ Ko‘rsatkichlar loads only server-authorized aggregates. Finance sees wallet/re
 
 
 Ish navbati (schema25) lists active support, listing and reported-chat work within the operator role. Administrators assign/reassign and explicitly set/clear a due time; eligible staff can claim unassigned work. Filters show own/unassigned/overdue items with bounded pagination. Closed-source detail and assignment history remain readable; source links open the existing reply/decision flow. Assignment has no financial or source-decision effect. Uncertain writes retain the exact payload/request ID; definite conflicts reload current state. No common support SLA, automatic escalation or additional customer messaging is implied.
+
+
+Delayed legacy reply, attachment picker and transcript polling results are bound to the originating customer/detail view. They cannot replace another selected customer’s data. An uncertain reply freezes its exact text/image/sitter/request ID until retry succeeds; a new message gets a new ID. Review/chat moderation results and private-history loads similarly stop updating after navigation. The 47-test Node suite includes delayed navigation, duplicate submit and uncertainty regressions.

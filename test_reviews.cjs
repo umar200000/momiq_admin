@@ -28,3 +28,19 @@ test('history is loaded explicitly and empty history ends paging',async()=>{
   const history=article.children.find(n=>n.tag==='button');await history.onclick();
   assert.equal(calls[0].path,'reviews/1/history');assert.equal(history.hidden,true);
 });
+
+test('a late moderation result cannot reopen reviews after navigation and double submit is ignored',async()=>{
+  const s=setup();let finish;const calls=[];
+  s.context.api=async(path,method='GET')=>{calls.push({path,method});if(method==='POST')return new Promise(resolve=>finish=resolve);return {items:[s.context.row],nextCursor:null};};
+  await vm.runInContext('openReviews()',s.context);
+  const article=s.get('#chatPanel').children.find(n=>n.tag==='div').children[0],form=article.children.find(n=>n.tag==='form');form.children[0].children[0].value='TEST delayed decision';
+  const pending=form.onsubmit({preventDefault(){}});await form.onsubmit({preventDefault(){}});assert.equal(calls.filter(c=>c.method==='POST').length,1);
+  s.context.state.panel='workQueue';s.get('#chatPanel').replaceChildren('TEST new panel');finish({ok:true});await pending;
+  assert.equal(s.context.state.panel,'workQueue');assert.deepEqual(s.get('#chatPanel').children,['TEST new panel']);assert.equal(calls.filter(c=>c.method==='GET').length,1);
+});
+
+test('a late private review-history response is discarded when its originating view is gone',async()=>{
+  const s=setup();let finish;s.context.api=async()=>({items:[s.context.row],nextCursor:null});await vm.runInContext('openReviews()',s.context);
+  const article=s.get('#chatPanel').children.find(n=>n.tag==='div').children[0],load=article.children.find(n=>n.tag==='button'),history=article.children.at(-1);
+  s.context.api=()=>new Promise(resolve=>finish=resolve);const pending=load.onclick();s.context.state.panel='support';finish({items:[{created:'TEST',actor:'private operator',revision:1,payload:{reason:'PRIVATE TEST'}}],nextCursor:null});await pending;assert.equal(history.children.length,0);
+});

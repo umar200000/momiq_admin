@@ -61,3 +61,13 @@ test('assignment source opens the exact report and stale list responses cannot r
   let finish;s.context.api=()=>new Promise(resolve=>finish=resolve);const pending=vm.runInContext('openChatReports()',s.context);
   s.context.state.panel='workQueue';s.get('#chatPanel').replaceChildren();finish({items:[],nextCursor:null});await pending;assert.equal(s.get('#chatPanel').children.length,0);
 });
+
+test('a delayed moderation decision from an older chat view cannot reopen or replace the newer view',async()=>{
+  const s=setup();await vm.runInContext("openChatReports('7')",s.context);
+  const article=s.get('#chatPanel').children[1];await article.children.find(n=>n.tag==='button').onclick();
+  const form=article.children.find(n=>n.tag==='div').children.find(n=>n.tag==='form');form.children[0].children[0].value='TEST decision';
+  let finish;s.context.api=()=>new Promise(resolve=>finish=resolve);
+  const pending=form.onsubmit({preventDefault(){},submitter:form.children.find(n=>n.value==='dismiss')});
+  s.context.state.panel='metrics';s.get('#chatPanel').replaceChildren('TEST report view');finish({ok:true});await pending;
+  assert.equal(s.context.state.panel,'metrics');assert.deepEqual(s.get('#chatPanel').children,['TEST report view']);assert.equal(s.notices.length,0);
+});

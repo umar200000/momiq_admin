@@ -37,13 +37,15 @@ test('support replies identify the operator and reuse a stable ID after a lost r
   input.value='TEST same reply';
   await form.onsubmit({preventDefault(){}});
   assert.equal(input.value,'TEST same reply');
-  assert.equal(input.disabled,false);
+  assert.equal(input.disabled,true);
   await form.onsubmit({preventDefault(){}});
   assert.equal(posts[0].requestId,posts[1].requestId);
   input.value='TEST changed reply';
   await form.onsubmit({preventDefault(){}});
-  assert.notEqual(posts[1].requestId,posts[2].requestId);
-  assert.equal(input.value,'');
+  assert.deepEqual(posts[1],posts[2]);
+  assert.equal(input.value,'');assert.equal(input.disabled,false);
+  input.value='TEST next reply';await form.onsubmit({preventDefault(){}});
+  assert.notEqual(posts[2].requestId,posts[3].requestId);
 });
 
 test('profile save sends the loaded revision and preserves conflicts for review', async () => {

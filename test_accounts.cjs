@@ -13,6 +13,29 @@ const summary=id=>({id,roles:['customer'],phone:'998000000001',blocked:false,cre
 const full=id=>({...summary(id),_summary:false,account:{_revision:4,profile:{first:'TEST '+id,last:'User',photo:null},favorites:[],addresses:[],pets:[]}});
 const text=n=>[n.textContent,...n.children.map(text)].join(' ');
 
+test('delayed legacy reply and image selection stay with the originating customer view',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();s.context.crypto=require('node:crypto').webcrypto;s.context.u=full('aaa');
+  let reply,image;
+  s.context.fetch=async(path,options)=>({ok:true,json:()=>options.method==='POST'?new Promise(resolve=>reply=resolve):{messages:[]}});
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='TEST sitter';state.sitters={'TEST sitter':'TEST'};renderChat($('#detail'),u)",s.context);await tick();
+  let form=s.get('#detail').children.find(n=>n.tag==='form');form.children[0].value='TEST private reply';const sending=form.onsubmit({preventDefault(){}});await tick();
+  vm.runInContext("state.selected='bbb';state.messages=[{text:'NEW customer'}]",s.context);reply({messages:[{text:'OLD private reply'}]});await sending;
+  assert.equal(vm.runInContext('state.messages[0].text',s.context),'NEW customer');
+  s.get('#detail').replaceChildren();vm.runInContext("state.selected='aaa';renderChat($('#detail'),u)",s.context);await tick();
+  s.context.readImage=()=>new Promise(resolve=>image=resolve);form=s.get('#detail').children.find(n=>n.tag==='form');form.children[1].files=[{name:'TEST'}];const picking=form.children[1].onchange();
+  assert.equal(form.children[2].disabled,true);vm.runInContext("state.selected='bbb';state.image='NEW attachment'",s.context);image('OLD private attachment');await picking;
+  assert.equal(vm.runInContext('state.image',s.context),'NEW attachment');
+});
+
+test('legacy reply uncertainty freezes content and request ID; stale polling cannot restore an old transcript',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();s.context.crypto=require('node:crypto').webcrypto;s.context.u=full('aaa');const posts=[];
+  s.context.fetch=async(path,options)=>{if(options.method==='POST'){posts.push(JSON.parse(options.body));throw Error('TEST response lost');}return {ok:true,json:async()=>({messages:[]})};};
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='TEST sitter';state.sitters={'TEST sitter':'TEST'};renderChat($('#detail'),u)",s.context);await tick();
+  const form=s.get('#detail').children.find(n=>n.tag==='form');form.children[0].value='TEST original';await form.onsubmit({preventDefault(){}});form.children[0].value='TEST altered';await form.onsubmit({preventDefault(){}});
+  assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);assert.equal(posts[0].text,'TEST original');assert.equal(form.children[0].disabled,true);
+  let finish;s.context.fetch=async()=>({ok:true,json:()=>new Promise(resolve=>finish=resolve)});const poll=vm.runInContext('refreshChat()',s.context);await tick();vm.runInContext("state.panel='workQueue';state.messages=[]",s.context);finish({messages:[{text:'PRIVATE old transcript'}]});await poll;assert.equal(vm.runInContext('state.messages.length',s.context),0);
+});
+
 test('summary is not editable until private detail loads and late detail cannot replace selected user',async()=>{
   let resolveFirst;
   const s=setup(path=>path.includes('/users?')?{users:[summary('aaa'),summary('bbb')],nextCursor:null,sitters:{}}:path.endsWith('/aaa')?new Promise(resolve=>resolveFirst=resolve):{user:full('bbb'),sitters:{}});
