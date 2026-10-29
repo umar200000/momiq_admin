@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-function setup(target=null,canResolve=true){
+function setup(target=null,canResolve=true,decisionContext=undefined){
   class Element{constructor(tag,text){this.tag=tag;this.textContent=text||'';this.children=[];this.value='';this.hidden=false;this.disabled=false;this.style={};this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[],notices=[];const get=id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);};let fail=false;
-  const page={target,canResolve,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
+  const page={target,canResolve,decisionContext:decisionContext===undefined&&target?.purpose==='appeal'&&canResolve?{version:'a'.repeat(64),snapshot:{kind:target.kind,id:target.id,status:'rejected'}}:decisionContext,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
   const context=vm.createContext({state:{panel:'support'},chatReportGeneration:0,$:get,el:(tag,text)=>new Element(tag,text),crypto:require('node:crypto').webcrypto,source:v=>'data:image/png;base64,'+v,notice:t=>notices.push(t),readImage:async()=>null,api:async(path,method='GET',body)=>{calls.push({path,method,body});if(method==='POST'&&fail)throw Error('TEST response lost');return path.endsWith('/image')?{image:'TEST'}:page;},page,live:true});
   vm.runInContext(fs.readFileSync('support.js','utf8'),context);vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",context);
   return {get,calls,notices,context,setFail:v=>fail=v};
@@ -90,4 +90,44 @@ test('pending reply deduplicates submits and obsolete failure never unlocks new 
   await form.onsubmit({preventDefault(){}});assert.equal(sent.length,1);
   context.live=false;reject(Error('Old account failure'));await first;
   assert.deepEqual(notices,[]);assert.equal(send.disabled,true);
+});
+
+test('appeal closure binds captured decision and retries unchanged after uncertain failure',async()=>{
+  const target={kind:'listing',id:'TEST:boarding',purpose:'appeal',snapshot:{reason:'Original'}};
+  const s=setup(target),panel=s.get('#chatPanel'),form=panel.children.find(n=>n.tag==='form');
+  const box=panel.children.find(n=>n.tag==='section');assert.equal(box.children.filter(n=>n.tag==='pre').length,2);
+  form.children[0].children[0].value='TEST reviewed reason';form.children[2].value='resolve';s.setFail(true);
+  await form.onsubmit({preventDefault(){}});s.context.page.decisionContext.version='b'.repeat(64);
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(s.calls[0].body.decisionVersion,'a'.repeat(64));assert.deepEqual(s.calls[0].body,s.calls[1].body);
+  assert.equal(panel.children.find(n=>n.textContent==='Qarorni qayta ko‘rish').hidden,true);
+});
+
+test('appeal with missing decision cannot resolve but can reply without fake metadata',async()=>{
+  const s=setup({kind:'review',id:'2',purpose:'appeal',snapshot:{}},true,null);
+  const form=s.get('#chatPanel').children.find(n=>n.tag==='form');form.children[0].children[0].value='TEST reply';
+  assert.deepEqual(form.children[2].children.map(n=>n.value),['reply']);
+  form.children[2].value='resolve';await form.onsubmit({preventDefault(){}});assert.equal(s.calls.length,0);
+  form.children[2].value='reply';await form.onsubmit({preventDefault(){}});
+  assert.equal('decisionVersion' in s.calls.find(c=>c.method==='POST').body,false);
+});
+
+test('definite stale appeal can reload decision while retaining reason and using a fresh request',async()=>{
+  const s=setup({kind:'listing',id:'TEST:boarding',purpose:'appeal',snapshot:{}}),sent=[];
+  s.context.api=async(path,method='GET',body)=>{if(method==='POST'){sent.push(body);const e=Error('TEST changed decision');e.status=409;throw e;}return s.context.page;};
+  let form=s.get('#chatPanel').children.find(n=>n.tag==='form');form.children[0].children[0].value='RETAIN MY REASON';form.children[2].value='resolve';
+  await form.onsubmit({preventDefault(){}});
+  const reload=s.get('#chatPanel').children.find(n=>n.textContent==='Qarorni qayta ko‘rish');assert.equal(reload.hidden,false);
+  s.context.page.decisionContext={version:'b'.repeat(64),snapshot:{status:'approved'}};
+  await reload.onclick();form=s.get('#chatPanel').children.find(n=>n.tag==='form');
+  assert.equal(form.children[0].children[0].value,'RETAIN MY REASON');assert.equal(form.children[2].value,'reply');
+  form.children[2].value='resolve';await form.onsubmit({preventDefault(){}});
+  assert.equal(sent[1].decisionVersion,'b'.repeat(64));assert.notEqual(sent[1].requestId,sent[0].requestId);
+});
+
+test('recorded appeal resolution remains inert historical text',()=>{
+  const s=setup();s.context.page.items[0].resolution={snapshot:{decision:{reason:'<script>not HTML</script>'}},sourceEvent:'audit:7'};
+  s.get('#chatPanel').replaceChildren();vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",s.context);
+  const card=s.get('#chatPanel').children.find(n=>n.tag==='div').children[0],pre=card.children.find(n=>n.tag==='pre');
+  assert.equal(pre.children.length,0);assert.match(pre.textContent,/<script>not HTML<\/script>/);assert.equal(s.calls.length,0);
 });
