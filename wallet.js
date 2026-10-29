@@ -2,7 +2,11 @@
 let walletSection = 'topups';
 let topupStatus = 'pending';
 let topupRows = [];
-let walletGeneration = 0;
+let walletGeneration = 0, walletViewGeneration = 0;
+function walletViewScope() {
+  const generation=walletGeneration, view=walletViewGeneration;
+  return ()=>generation===walletGeneration&&view===walletViewGeneration&&state.panel==='wallet'&&!$('#walletPanel').hidden;
+}
 function resetWalletAdmin() { topupRows = []; ++walletGeneration; }
 
 function parseMinor(value, allowZero = false) {
@@ -53,20 +57,26 @@ async function openWalletAdmin(section) {
 }
 
 function renderWalletSettings(config) {
+  ++walletViewGeneration;const current=walletViewScope();
   const panel = $('#walletPanel'); panel.replaceChildren();
   panel.append(el('h2', 'Komissiya va balans to‘ldirish'), el('p', 'Mijoz xizmat pulini enagaga bevosita to‘laydi. Ishlatilmagan Momiq balansi qaytarilmaydi. Yangi mijozlar uchun minimal balans: ' + walletMoney(config.minimumBalanceMinor)));
   const form = el('form');
   const rate = walletField(form, 'Komissiya (%)', 'rate');
   rate.inputMode = 'decimal'; rate.value = String(config.commissionBps / 100);
-  let qr = config.qrImage;
+  let qr = config.qrImage, picking=false, pickGeneration=0;
   const preview = el('div');
   if (qr) preview.append(walletImage(qr, 'Paynet Xolis QR'));
   form.append(preview);
   const upload = walletField(form, 'Paynet Xolis QR rasmi (3 MB gacha)', 'qr', 'file');
   upload.required = false; upload.accept = 'image/png,image/jpeg,image/webp';
   upload.onchange = async () => {
-    try { qr = await readImage(upload.files[0]); preview.replaceChildren(); if (qr) preview.append(walletImage(qr, 'Yangi QR')); }
-    catch (error) { upload.value = ''; notice(error.message); }
+    if(!current()||save.disabled&&!picking)return;
+    const generation=++pickGeneration,file=upload.files[0];
+    const active=()=>current()&&generation===pickGeneration;
+    picking=true;save.disabled=true;
+    try { const result=await readImage(file); if(active()){qr=result;preview.replaceChildren();if(qr)preview.append(walletImage(qr,'Yangi QR'));} }
+    catch(error){if(active()){upload.value='';notice(error.message);}}
+    finally{if(active()){picking=false;save.disabled=false;}}
   };
   const test = walletField(form, 'Bu sinov QR kodi', 'testOnly', 'checkbox');
   test.required = false; test.checked = config.testOnly;
@@ -80,15 +90,15 @@ function renderWalletSettings(config) {
   const reason = walletField(form, 'O‘zgartirish sababi', 'reason'); reason.maxLength = 1000;
   const save = el('button', 'Sozlamalarni saqlash'); form.append(save);
   form.onsubmit = async event => {
-    event.preventDefault(); save.disabled = true;
+    event.preventDefault();if(!current()||picking||save.disabled)return; save.disabled = true;
     try {
       const commissionBps = parseMinor(rate.value, true);
       if (commissionBps > 10000) throw Error('Foiz 0–100 oralig‘ida bo‘lsin.');
       if (active.checked && (!qr || !recipient.value.trim())) throw Error('Faol QR uchun rasm va oluvchi nomini kiriting.');
       await api('platform-settings', 'PUT', {version: config.version, commissionBps, qrImage: qr, testOnly: test.checked, reason: reason.value.trim(), recipientName:recipient.value.trim(), paymentInstructions:instructions.value.trim(), qrActive:active.checked});
-      await openWalletAdmin('settings'); notice('Sozlamalar saqlandi.');
-    } catch (error) { notice(error.message); }
-    finally { save.disabled = false; }
+      if(!current())return;notice('Sozlamalar saqlandi.');await openWalletAdmin('settings');
+    } catch (error) { if(current())notice(error.message); }
+    finally { if(current())save.disabled = false; }
   };
   panel.append(form);
   panel.append(el('p', 'Saqlangan komissiya darhol yangi narx takliflariga qo‘llanadi. Oldingi buyurtma foizi va summasi o‘zgarmaydi.'));
@@ -96,9 +106,10 @@ function renderWalletSettings(config) {
   const entries=el('div'), error=el('p'), more=el('button','Tarixni ko‘rish');
   more.type='button'; let cursor=null, busy=false;
   more.onclick=async()=>{
-    if(busy) return; busy=true; more.disabled=true; error.textContent='';
+    if(!current()||busy) return; busy=true; more.disabled=true; error.textContent='';
     try {
       const page=await api('platform-settings/history'+(cursor?'?before='+encodeURIComponent(cursor):''));
+      if(!current())return;
       for(const item of page.items) {
         const row=el('article');
         row.append(el('strong', '#'+item.version+' — '+(item.commissionBps/100)+'%'),
@@ -109,13 +120,14 @@ function renderWalletSettings(config) {
       }
       if(!page.items.length && !cursor) entries.append(el('p','Tarix yozuvi yo‘q.'));
       cursor=page.nextCursor; more.hidden=!cursor; more.textContent='Oldingi yozuvlar';
-    } catch(e) { error.textContent=e.message; }
-    finally { busy=false; more.disabled=false; }
+    } catch(e) { if(current())error.textContent=e.message; }
+    finally { if(current()){busy=false; more.disabled=false;} }
   };
   history.append(entries,error,more); panel.append(history);
 }
 
 function renderTopups(rows, nextCursor) {
+  ++walletViewGeneration;const current=walletViewScope();
   const panel = $('#walletPanel'); panel.replaceChildren();
   const filter = el('select'); filter.setAttribute('aria-label','Chek holati');
   for (const [value, title] of [['pending','Kutilayotgan'],['needs_info','Aniqlashtirish kerak'],['approved','Tasdiqlangan'],['rejected','Rad etilgan'],['all','Barchasi']]) {
@@ -137,10 +149,10 @@ function renderTopups(rows, nextCursor) {
     const details = el('details'); details.append(el('summary', 'Chekni ko‘rish')); card.append(details);
     let loaded=false, loading=false;
     details.ontoggle=async()=>{
-      if (!details.open || loaded || loading) return;
+      if (!current() || !details.open || loaded || loading) return;
       loading=true;
       try {
-        const data=await api('topups/'+row.id+'/receipt');
+        const data=await api('topups/'+row.id+'/receipt');if(!current())return;
         details.append(walletImage(data.receipt,'Enaga yuborgan to‘lov cheki'));
         if(data.paymentSnapshot){
           const snapshot=data.paymentSnapshot;
@@ -151,12 +163,12 @@ function renderTopups(rows, nextCursor) {
         }
         loaded=true;
       }
-      catch(error) { notice(error.message); details.open=false; }
-      finally { loading=false; }
+      catch(error) { if(current()){notice(error.message); details.open=false;} }
+      finally { if(current())loading=false; }
     };
     if (row.reviewReason) card.append(el('p', row.reviewReason));
-    appendTopupHistory(card,row);
-    if (row.status === 'approved') appendTopupCorrections(card,row);
+    appendTopupHistory(card,row,current);
+    if (row.status === 'approved') appendTopupCorrections(card,row,current);
     if (row.status === 'pending') {
       const form = el('form');
       const received = walletField(form, 'Hisobga tushgan summa (so‘m)', 'received'); received.inputMode = 'decimal';
@@ -167,6 +179,7 @@ function renderTopups(rows, nextCursor) {
       const reject = el('button', 'Rad etish', 'danger'); reject.type = 'button';
       const clarify = el('button', 'Aniqlashtirish so‘rash'); clarify.type = 'button';
       const review = async decision => {
+        if(!current()||approve.disabled)return;
         if (!reason.value.trim()) { notice('Tekshiruv sababini yozing.'); return; }
         approve.disabled = reject.disabled = clarify.disabled = true;
         try {
@@ -179,9 +192,9 @@ function renderTopups(rows, nextCursor) {
             if (!body.transferReference) throw Error('Tushum ID raqamini kiriting.');
           }
           await api('topups/' + row.id + '/review', 'POST', body);
-          await openWalletAdmin('topups'); notice(decision === 'approve' ? 'Balansga bir marta qo‘shildi.' : decision === 'request_info' ? 'Enagaga aniqlashtirish talabi yuborildi. Balans o‘zgarmadi.' : 'So‘rov rad etildi.');
-        } catch (error) { notice(error.message); }
-        finally { approve.disabled = reject.disabled = clarify.disabled = false; }
+          if(!current())return;notice(decision === 'approve' ? 'Balansga bir marta qo‘shildi.' : decision === 'request_info' ? 'Enagaga aniqlashtirish talabi yuborildi. Balans o‘zgarmadi.' : 'So‘rov rad etildi.');await openWalletAdmin('topups');
+        } catch (error) { if(current())notice(error.message); }
+        finally { if(current())approve.disabled = reject.disabled = clarify.disabled = false; }
       };
       form.onsubmit = event => { event.preventDefault(); return review('approve'); };
       reject.onclick = () => review('reject');
@@ -193,21 +206,21 @@ function renderTopups(rows, nextCursor) {
   if (nextCursor) {
     const more=el('button','Yana yuklash'); panel.append(more);
     more.onclick=async()=>{
-      more.disabled=true;
-      try { const page=await api('topups?status='+topupStatus+'&cursor='+encodeURIComponent(nextCursor)); topupRows=[...rows,...page.topups];renderTopups(topupRows,page.nextCursor); }
-      catch(error){notice(error.message);more.disabled=false;}
+      if(!current()||more.disabled)return;more.disabled=true;
+      try { const page=await api('topups?status='+topupStatus+'&cursor='+encodeURIComponent(nextCursor));if(!current())return; topupRows=[...rows,...page.topups];renderTopups(topupRows,page.nextCursor); }
+      catch(error){if(current()){notice(error.message);more.disabled=false;}}
     };
   }
 }
 
-function appendTopupHistory(card,row) {
+function appendTopupHistory(card,row,current=walletViewScope()) {
   const history=el('details');history.append(el('summary','Tekshiruv va chek nusxalari tarixi'));card.append(history);
   let loaded=false,loading=false,cursor=null;
   const more=el('button','Yana yuklash');more.type='button';
   const load=async()=>{
-    if(loading)return;loading=true;more.disabled=true;
+    if(!current()||loading)return;loading=true;more.disabled=true;
     try {
-      const page=await api('topups/'+row.id+'/history'+(cursor===null?'':'?before='+encodeURIComponent(cursor)));
+      const page=await api('topups/'+row.id+'/history'+(cursor===null?'':'?before='+encodeURIComponent(cursor)));if(!current())return;
       more.remove?.();
       for(const item of page.items){
         const eventLabel={created:'Yuborilgan',migrated:'Eski yozuvdan saqlangan nusxa',request_info:'Aniqlashtirish so‘ralgan',resubmitted:'Qayta yuborilgan',approve:'Tasdiqlangan',reject:'Rad etilgan'}[item.event]||item.event;
@@ -216,24 +229,24 @@ function appendTopupHistory(card,row) {
         if(item.actor)entry.append(el('p','Amal egasi: '+item.actor));
         if(item.payerReference)entry.append(el('p','Enaga reference: '+item.payerReference));
         const imageButton=el('button','Shu bosqichdagi chek');imageButton.type='button';
-        imageButton.onclick=async()=>{imageButton.disabled=true;try{const data=await api('topups/'+row.id+'/history/'+item.revision+'/receipt');entry.append(walletImage(data.receipt,'Chekning v'+item.revision+' nusxasi'));imageButton.hidden=true;}catch(error){notice(error.message);}finally{imageButton.disabled=false;}};
+        imageButton.onclick=async()=>{if(!current()||imageButton.disabled)return;imageButton.disabled=true;try{const data=await api('topups/'+row.id+'/history/'+item.revision+'/receipt');if(!current())return;entry.append(walletImage(data.receipt,'Chekning v'+item.revision+' nusxasi'));imageButton.hidden=true;}catch(error){if(current())notice(error.message);}finally{if(current())imageButton.disabled=false;}};
         entry.append(imageButton);history.append(entry);
       }
       cursor=page.nextCursor;loaded=true;
       if(cursor!==null)history.append(more);
-    }catch(error){notice(error.message);}finally{loading=false;more.disabled=false;}
+    }catch(error){if(current())notice(error.message);}finally{if(current()){loading=false;more.disabled=false;}}
   };
   history.ontoggle=()=>{if(history.open&&!loaded)return load();};more.onclick=load;
 }
-function appendTopupCorrections(card,row) {
+function appendTopupCorrections(card,row,current=walletViewScope()) {
   const details=el('details'); details.append(el('summary','Tushumni tuzatish va tuzatishlar tarixi')); card.append(details);
   const content=el('div'), error=el('p'), retry=el('button','Qayta yuklash');
   retry.type='button'; details.append(content,error,retry);
   let loaded=false, busy=false;
   const load=async()=>{
-    if(busy)return; busy=true; retry.disabled=true; error.textContent='';
+    if(!current()||busy)return; busy=true; retry.disabled=true; error.textContent='';
     try {
-      const page=await api('topups/'+row.id+'/corrections');
+      const page=await api('topups/'+row.id+'/corrections');if(!current())return;
       content.replaceChildren(el('p','Asl tushum: '+walletMoney(page.originalAmountMinor)+' · Tuzatilgan: '+walletMoney(page.correctedMinor)),
         el('p','Joriy balans: '+walletMoney(page.balanceMinor)+' · Tushum ID: '+page.transferReference),
         el('p','Bu xato kiritilgan tushumni kamaytiradi. Pul kartaga qaytarilmaydi. Qoldiq yetmasa amal rad etiladi; yordam xizmati orqali ko‘rib chiqing.'));
@@ -244,7 +257,7 @@ function appendTopupCorrections(card,row) {
       append(page.items);
       let cursor=page.nextCursor;
       const more=el('button','Oldingi tuzatishlar'); more.type='button'; more.hidden=!cursor; content.append(more);
-      more.onclick=async()=>{if(more.disabled)return;more.disabled=true;try{const older=await api('topups/'+row.id+'/corrections?before='+encodeURIComponent(cursor));append(older.items);cursor=older.nextCursor;more.hidden=!cursor;}catch(e){error.textContent=e.message;}finally{more.disabled=false;}};
+      more.onclick=async()=>{if(!current()||more.disabled)return;more.disabled=true;try{const older=await api('topups/'+row.id+'/corrections?before='+encodeURIComponent(cursor));if(!current())return;append(older.items);cursor=older.nextCursor;more.hidden=!cursor;}catch(e){if(current())error.textContent=e.message;}finally{if(current())more.disabled=false;}};
       if(page.correctedMinor<page.originalAmountMinor) {
         const form=el('form');
         const amount=walletField(form,'Kamaytiriladigan summa (so‘m)','correctionAmount'); amount.inputMode='decimal';
@@ -253,7 +266,7 @@ function appendTopupCorrections(card,row) {
         const save=el('button','Balansni shu summaga kamaytirish'); form.append(save); content.append(form);
         let pending=null, sending=false;
         form.onsubmit=async event=>{
-          event.preventDefault(); if(sending)return;
+          event.preventDefault(); if(!current()||sending)return;
           try {
             if(!pending) {
               if(!confirmed.checked||!reason.value.trim())throw Error('Sababni yozing va tekshirganingizni tasdiqlang.');
@@ -262,16 +275,16 @@ function appendTopupCorrections(card,row) {
               pending={amountMinor:value,reason:reason.value.trim(),expectedCorrectedMinor:page.correctedMinor,requestId:crypto.randomUUID()};
             }
             sending=true;save.disabled=retry.disabled=true;amount.disabled=reason.disabled=confirmed.disabled=true;
-            await api('topups/'+row.id+'/corrections','POST',pending);
+            await api('topups/'+row.id+'/corrections','POST',pending);if(!current())return;
             // Never re-submit a confirmed debit if the subsequent history refresh fails.
             form.replaceChildren(el('p','Tuzatish saqlandi. Balans kamaytirildi.'));
-            loaded=false;await load();notice('Tuzatish saqlandi.');
-          } catch(e){error.textContent=e.message;save.textContent=pending?'Xuddi shu tuzatishni qayta yuborish':'Balansni shu summaga kamaytirish';}
-          finally{sending=false;save.disabled=retry.disabled=false;}
+            loaded=false;await load();if(current())notice('Tuzatish saqlandi.');
+          } catch(e){if(current()){error.textContent=e.message;save.textContent=pending?'Xuddi shu tuzatishni qayta yuborish':'Balansni shu summaga kamaytirish';}}
+          finally{if(current()){sending=false;save.disabled=retry.disabled=false;}}
         };
       }
       loaded=true;
-    }catch(e){error.textContent=e.message;}finally{busy=false;retry.disabled=false;}
+    }catch(e){if(current())error.textContent=e.message;}finally{if(current()){busy=false;retry.disabled=false;}}
   };
   details.ontoggle=()=>{if(details.open&&!loaded)return load();}; retry.onclick=load;
 }

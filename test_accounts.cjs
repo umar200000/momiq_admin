@@ -13,6 +13,50 @@ const summary=id=>({id,roles:['customer'],phone:'998000000001',blocked:false,cre
 const full=id=>({...summary(id),_summary:false,account:{_revision:4,profile:{first:'TEST '+id,last:'User',photo:null},favorites:[],addresses:[],pets:[]}});
 const text=n=>[n.textContent,...n.children.map(text)].join(' ');
 
+function profileForm(s){
+  s.context.u=full('aaa');
+  vm.runInContext("state.selected='aaa';state.detailRecord=u;state.tab='profile';renderDetail()",s.context);
+  const form=s.get('#detail').children.find(n=>n.tag==='form');
+  form.elements=Object.fromEntries(form.children[0].children.map(label=>[label.children[0].name,label.children[0]]));
+  form.children[2].children[0].value='TEST reason';
+  return form;
+}
+
+test('profile upload prevents early save and removing it cancels the pending image',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const form=profileForm(s),file=form.children[1].children[0];
+  let finish;s.context.readImage=()=>new Promise(resolve=>finish=resolve);
+  const writes=[];s.context.fetch=async(path,options)=>{if(options.method==='PUT')writes.push(JSON.parse(options.body));return {ok:false,status:409,json:async()=>({error:'TEST revision changed'})};};
+  file.files=['TEST image'];const selecting=file.onchange();
+  await form.onsubmit({preventDefault(){}});assert.equal(writes.length,0);
+  const remove=form.children[3].children.find(n=>n.textContent==='Rasmni olib tashlash');remove.onclick();
+  finish('CANCELLED PRIVATE PHOTO');await selecting;
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(writes.length,1);assert.equal(writes[0].account.profile.photo,null);
+});
+
+test('profile save from previous selection cannot reload or notify another panel',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const form=profileForm(s);let finish;const requests=[];
+  s.context.fetch=async(path,options)=>{requests.push(path);return {ok:true,json:()=>new Promise(resolve=>finish=resolve)};};
+  const saving=form.onsubmit({preventDefault(){}});await tick();
+  vm.runInContext("state.panel='support';state.selected='bbb'",s.context);s.get('#notice').textContent='NEW VIEW';
+  finish({ok:true});await saving;
+  assert.deepEqual(requests,['/api/admin/users/aaa']);assert.equal(s.get('#notice').textContent,'NEW VIEW');
+  await form.onsubmit({preventDefault(){}});assert.equal(requests.length,1);
+});
+
+test('latest legacy attachment wins while older picker failure remains silent',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();s.context.crypto=require('node:crypto').webcrypto;s.context.u=full('aaa');
+  const picks=[],posts=[];s.context.readImage=()=>new Promise((resolve,reject)=>picks.push({resolve,reject}));
+  s.context.fetch=async(path,options)=>{if(options.method==='POST')posts.push(JSON.parse(options.body));return {ok:true,json:async()=>({messages:[]})};};
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='TEST';state.sitters={TEST:'TEST'};renderChat($('#detail'),u)",s.context);await tick();
+  const form=s.get('#detail').children.find(n=>n.tag==='form'),file=form.children[1];
+  file.files=['old'];const old=file.onchange();file.files=['new'];const latest=file.onchange();
+  picks[0].reject(Error('STALE'));await old;assert.equal(form.children[2].disabled,true);
+  picks[1].resolve('LATEST');await latest;form.children[0].value='TEST reply';
+  await form.onsubmit({preventDefault(){}});assert.equal(posts[0].image,'LATEST');
+  assert.notEqual(s.get('#notice').textContent,'STALE');
+});
+
 test('legacy removal requires an explicit reason and sends only that reason',async()=>{
   const s=setup(()=>({users:[],sitters:{}}));await tick();const writes=[];
   s.context.fetch=async(path,options)=>{writes.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({ok:true})};};

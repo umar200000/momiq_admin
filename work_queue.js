@@ -30,7 +30,7 @@ async function openWorkQueue(kind=null,filter='all',target=null){
     const add=items=>{for(const item of items){if(seen.has(item.source.target))continue;seen.add(item.source.target);const button=el('button',item.source.title+' · '+item.source.status+' · '+workSummary(item.assignment),'secondary');button.onclick=()=>openWorkQueue(kind,filter,item.source.target);rows.append(button);}};
     add(page.items);if(!page.items.length)rows.append(el('p','Bu filtrda faol ish yo‘q.'));
     let cursor=page.nextCursor;const more=el('button','Yana','secondary');more.hidden=!cursor;panel.append(more);
-    more.onclick=async()=>{if(more.disabled||!current())return;more.disabled=true;try{const next=await api(url+'&after='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{more.disabled=false;}};
+    more.onclick=async()=>{if(more.disabled||!current())return;more.disabled=true;try{const next=await api(url+'&after='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
   }catch(e){if(current()){const retry=el('button','Qayta urinish');retry.onclick=()=>openWorkQueue(kind,filter,target);panel.replaceChildren(el('p',e.message),retry);}}
 }
 function renderWorkDetail(panel,data,operators,current,reload){
@@ -60,13 +60,13 @@ function renderWorkDetail(panel,data,operators,current,reload){
         send.disabled=true;person.disabled=due.disabled=reason.disabled=true;
         await api(workPath(kind,row.target),'POST',pending);if(current())await reload();
       }catch(e){if(current()){notice(e.message);stale=[400,403,409].includes(e.status);send.textContent=stale?'Holatni qayta yuklash':'Ayni so‘rovni qayta yuborish';}}
-      finally{send.disabled=false;}
+      finally{if(current())send.disabled=false;}
     };
   }
   panel.append(el('h3','Biriktirish tarixi'));const history=el('div');panel.append(history);const seen=new Set();
   const add=items=>{for(const event of items){if(seen.has(event.id))continue;seen.add(event.id);history.append(el('p',event.revision+' · '+event.actor+' · '+workDate(event.created)+' · '+event.reason),el('p',(event.before.assignee||'Biriktirilmagan')+' → '+(event.after.assignee||'Biriktirilmagan')+' · '+workDate(event.before.dueAt)+' → '+workDate(event.after.dueAt),'meta'));}};
   add(data.items);if(!data.items.length)history.append(el('p','Hali biriktirish bo‘lmagan.'));
   let cursor=data.nextCursor;const more=el('button','Oldingi o‘zgarishlar','secondary');more.hidden=!cursor;panel.append(more);
-  more.onclick=async()=>{if(more.disabled||!current())return;more.disabled=true;try{const next=await api(workPath(kind,row.target)+'?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{more.disabled=false;}};
+  more.onclick=async()=>{if(more.disabled||!current())return;more.disabled=true;try{const next=await api(workPath(kind,row.target)+'?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
 }
 $('#workQueueNav').onclick=()=>openWorkQueue();

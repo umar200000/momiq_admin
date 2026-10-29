@@ -20,7 +20,7 @@ async function openReviews() {
     const add=items=>{for(const row of items){if(ids.has(row.id))continue;ids.add(row.id);renderReview(list,row,current);}};
     add(page.items);if(!page.items.length)list.append(el('p','Hali sharh yo‘q.'));
     let cursor=page.nextCursor;const more=el('button','Yana','secondary');more.hidden=!cursor;panel.append(more);
-    more.onclick=async()=>{more.disabled=true;try{const next=await api('reviews?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){notice(e.message);}finally{more.disabled=false;}};
+    more.onclick=async()=>{more.disabled=true;try{const next=await api('reviews?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
   } catch(e) {if(current())panel.replaceChildren(el('p',e.message));}
 }
 
@@ -39,7 +39,7 @@ function renderReview(list,row,current=()=>true) {
     submit.disabled=true;reason.disabled=true;
     try{await api('reviews/'+row.id+'/moderate','POST',pending);if(current())await openReviews();}
     catch(e){if(current()){notice(e.message);submit.textContent='Ayni qarorni qayta yuborish';}}
-    finally{submit.disabled=false;}
+    finally{if(current())submit.disabled=false;}
   };
   const history=el('div'),load=el('button','Qarorlar tarixini ko‘rish','secondary');article.append(load,history);
   let cursor=null,started=false;
@@ -51,7 +51,7 @@ function renderReview(list,row,current=()=>true) {
       for(const item of page.items){history.append(el('p',item.created+' · '+item.actor+' · v'+item.revision),el('p',item.payload.reason||item.action));}
       if(!started&&!page.items.length)history.append(el('p','Tarix bo‘sh.'));
       started=true;cursor=page.nextCursor;load.hidden=!cursor;load.textContent='Oldingi qarorlar';
-    }catch(e){if(current())notice(e.message);}finally{load.disabled=false;}
+    }catch(e){if(current())notice(e.message);}finally{if(current())load.disabled=false;}
   };
 }
 $('#reviewsNav').onclick=openReviews;

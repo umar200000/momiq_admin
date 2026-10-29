@@ -24,7 +24,7 @@ async function openAdminBookings(identity=null,filter={status:'all',q:''}){
     const add=items=>{for(const row of items){if(seen.has(row.id))continue;seen.add(row.id);const card=el('article',undefined,'walletRequest');card.append(el('b',(row.testOnly?'TEST · ':'')+(services[row.service]||row.service)+' · '+row.status),el('p',row.customerName+' → '+row.sitterName),el('p',row.startsAt+' — '+row.endsAt),el('p','Kelishilgan xizmat summasi: '+walletMoney(row.serviceTotalMinor)));const open=el('button','#'+row.id,'secondary');open.onclick=()=>openAdminBookings(row.id,filter);card.append(open);list.append(card);}};
     add(page.items);if(!page.items.length)list.append(el('p','Bu filtrga mos buyurtma yo‘q.'));
     let cursor=page.nextCursor;const more=el('button','Yana','secondary');more.hidden=!cursor;panel.append(more);
-    more.onclick=async()=>{more.disabled=true;try{const next=await api('bookings?'+query+'&before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{more.disabled=false;}};
+    more.onclick=async()=>{more.disabled=true;try{const next=await api('bookings?'+query+'&before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
   }catch(e){if(current()){panel.replaceChildren(el('p',e.message));const retry=el('button','Qayta urinish','secondary');retry.onclick=()=>openAdminBookings(identity,filter);panel.append(retry);}}
 }
 function renderAdminBooking(panel,page,current){
@@ -41,7 +41,7 @@ function renderAdminBooking(panel,page,current){
   const history=el('div');panel.append(history);
   adminBookingTimeline(history,'bookings/'+page.id+'/history',page.history,current,false);
   const care=el('button','Parvarish tarixini ochish','secondary'),careBox=el('div');panel.append(care,careBox);
-  care.onclick=async()=>{care.disabled=true;try{const result=await api('bookings/'+page.id+'/care');if(!current())return;careBox.replaceChildren(el('p','Parvarish yozuvlari egasi/enaga bildirgan ma’lumotlar; mustaqil xizmat tasdig‘i emas.','meta'));adminBookingTimeline(careBox,'bookings/'+page.id+'/care',result,current,true);care.hidden=true;}catch(e){if(current())notice(e.message);}finally{care.disabled=false;}};
+  care.onclick=async()=>{care.disabled=true;try{const result=await api('bookings/'+page.id+'/care');if(!current())return;careBox.replaceChildren(el('p','Parvarish yozuvlari egasi/enaga bildirgan ma’lumotlar; mustaqil xizmat tasdig‘i emas.','meta'));adminBookingTimeline(careBox,'bookings/'+page.id+'/care',result,current,true);care.hidden=true;}catch(e){if(current())notice(e.message);}finally{if(current())care.disabled=false;}};
   const videos=el('button','Video hisobotlarni ko‘rish','secondary'),videoBox=el('div');panel.append(videos,videoBox);
   videos.onclick=()=>adminBookingVideos(videoBox,page.id,current);
 }
@@ -77,6 +77,6 @@ function adminBookingTimeline(box,path,page,current,care){
   const add=items=>{for(const item of items){const key=care?item.id:item.revision;if(seen.has(key))continue;seen.add(key);list.append(el('p',care?item.created+' · '+item.actorRole+' · '+item.petId+' · '+item.day+' · '+item.category+' · '+JSON.stringify(item.payload):item.created+' · '+item.actor+' · '+item.action+' → '+item.status+' · '+item.reason));}};
   add(page.items);if(!page.items.length)list.append(el('p','Hozircha yozuv yo‘q.'));
   let cursor=page.nextCursor;const more=el('button','Oldingi yozuvlar','secondary');more.hidden=!cursor;box.append(more);
-  more.onclick=async()=>{more.disabled=true;try{const next=await api(path+'?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{more.disabled=false;}};
+  more.onclick=async()=>{more.disabled=true;try{const next=await api(path+'?before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
 }
 $('#bookingsNav').onclick=()=>openAdminBookings();

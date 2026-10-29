@@ -36,7 +36,7 @@ async function openChatReports(identity=null) {
     if (!page.items.length) list.append(el('p','Hozircha shikoyat yo‘q.'));
     let cursor=page.nextCursor;
     const more=el('button','Yana','secondary');more.hidden=!cursor;panel.append(more);
-    more.onclick=async()=>{more.disabled=true;try{const next=await api('chat-reports?status='+chatReportStatus+'&before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){notice(e.message);}finally{more.disabled=false;}};
+    more.onclick=async()=>{more.disabled=true;try{const next=await api('chat-reports?status='+chatReportStatus+'&before='+encodeURIComponent(cursor));if(!current())return;add(next.items);cursor=next.nextCursor;more.hidden=!cursor;}catch(e){if(current())notice(e.message);}finally{if(current())more.disabled=false;}};
   } catch(error) {if(current())panel.replaceChildren(el('p',error.message));}
 }
 
@@ -53,7 +53,7 @@ function renderChatReport(list, row, current=()=>true) {
       if(data.message.hidden)evidence.append(el('p','Xabar ishtirokchilardan yashirilgan.'));
       if(data.message.hasImage){
         const button=el('button','Dalil rasmini ochish','secondary');evidence.append(button);
-        button.onclick=async()=>{button.disabled=true;try{const image=await api('chat-reports/'+row.id+'/image');if(!current())return;const img=el('img',undefined,'walletImage');img.src=source(image.image);img.alt='Shikoyatga biriktirilgan asl dalil';evidence.append(img);button.hidden=true;}catch(e){notice(e.message);}finally{button.disabled=false;}};
+        button.onclick=async()=>{button.disabled=true;try{const image=await api('chat-reports/'+row.id+'/image');if(!current())return;const img=el('img',undefined,'walletImage');img.src=source(image.image);img.alt='Shikoyatga biriktirilgan asl dalil';evidence.append(img);button.hidden=true;}catch(e){if(current())notice(e.message);}finally{if(current())button.disabled=false;}};
       }
       for(const h of data.history)evidence.append(el('p',`${h.revision} · ${chatStatus(h.status)} · ${h.actor} · ${h.reason}`,'meta'));
       if(data.report.status==='open'){
@@ -70,11 +70,11 @@ function renderChatReport(list, row, current=()=>true) {
             await api('chat-reports/'+row.id+'/review','POST',{revision:data.report.revision,decision,reason:reason.value.trim()});
             if(!current())return;notice('Qaror saqlandi.');
             if(state.panel==='chatReports'&&!$('#chatPanel').hidden)await openChatReports();
-          } catch(e){if(current())notice(e.message);} finally{remove.disabled=dismiss.disabled=reason.disabled=false;}
+          } catch(e){if(current())notice(e.message);} finally{if(current())remove.disabled=dismiss.disabled=reason.disabled=false;}
         };
       }
       open.textContent='Dalilni yangilash';
-    } catch(error){if(current())notice(error.message);}finally{open.disabled=false;}
+    } catch(error){if(current())notice(error.message);}finally{if(current())open.disabled=false;}
   };
 }
 $('#chatReportsNav').onclick=()=>openChatReports();

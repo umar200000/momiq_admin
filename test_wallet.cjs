@@ -49,10 +49,74 @@ function setup() {
   }
   const nodes = new Map(), calls = [], notices = [];
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Element('div')); return nodes.get(id); };
-  const context = vm.createContext({$:get, el:(tag,text)=>new Element(tag,text), source:s=>s, state:{users:[]}, name:()=>'', notice:s=>notices.push(s), api:async(path,method,body)=>{calls.push({path,method,body});return {topups:[]};}});
+  const context = vm.createContext({$:get, el:(tag,text)=>new Element(tag,text), source:s=>s, state:{users:[],panel:'wallet'}, name:()=>'', notice:s=>notices.push(s), api:async(path,method,body)=>{calls.push({path,method,body});return {topups:[]};}});
   vm.runInContext(fs.readFileSync('wallet.js','utf8'), context);
   return {context,get,calls,notices};
 }
+
+test('old receipt response cannot populate a replacement wallet view',async()=>{
+  const {context,get,notices}=setup();let release;
+  context.rows=[{id:'old',userId:'sitter',amountMinor:1000,status:'rejected',created:'2026-10-29'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article');
+  const details=card.children.find(n=>n.tag==='details');
+  context.api=()=>new Promise(resolve=>release=resolve);
+  details.open=true;const loading=details.ontoggle();
+  vm.runInContext('renderTopups([])',context);
+  release({receipt:'PRIVATE OLD RECEIPT'});await loading;
+  assert.equal(details.children.some(n=>n.tag==='img'),false);
+  assert.equal(get('#walletPanel').children.some(n=>n.tag==='article'),false);
+  assert.deepEqual(notices,[]);
+});
+
+test('old topup review completion cannot navigate away from new panel',async()=>{
+  const {context,get,calls,notices}=setup();let release;
+  context.rows=[{id:'old',revision:0,userId:'sitter',amountMinor:1000,status:'pending',created:'2026-10-29'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article'),form=card.children.find(n=>n.tag==='form');
+  const fields=Object.fromEntries(form.children.filter(n=>n.tag==='label').map(n=>[n.children[0].name,n.children[0]]));
+  fields.reason.value='TEST reject';
+  context.api=(path,method,body)=>{calls.push({path,method,body});return new Promise(resolve=>release=resolve);};
+  const reject=form.children.find(n=>n.tag==='button'&&n.textContent==='Rad etish');
+  const sending=reject.onclick();context.state.panel='support';
+  release({status:'rejected'});await sending;
+  assert.equal(calls.length,1);assert.equal(context.state.panel,'support');assert.deepEqual(notices,[]);
+});
+
+test('QR selection blocks save and only latest file can become payment QR',async()=>{
+  const {context,get,calls}=setup();const picks=[];
+  context.readImage=()=>new Promise(resolve=>picks.push(resolve));
+  context.config={version:1,commissionBps:1000,minimumBalanceMinor:1500000,qrImage:'ORIGINAL',testOnly:true,qrActive:true,recipientName:'TEST recipient'};
+  vm.runInContext('renderWalletSettings(config)',context);
+  const form=get('#walletPanel').children.find(n=>n.tag==='form');
+  const fields=Object.fromEntries(form.children.filter(n=>n.tag==='label').map(n=>[n.children[0].name,n.children[0]]));
+  fields.reason.value='TEST QR update';fields.qr.files=['old'];const old=fields.qr.onchange();
+  fields.qr.files=['new'];const latest=fields.qr.onchange();
+  await form.onsubmit({preventDefault(){}});assert.equal(calls.length,0);
+  picks[1]('LATEST');await latest;picks[0]('STALE');await old;
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(calls.find(c=>c.method==='PUT').body.qrImage,'LATEST');
+});
+
+test('stale correction form cannot debit after switching wallet records',async()=>{
+  const {context,get,calls}=setup();
+  context.crypto={randomUUID:()=> 'TEST-stable'};
+  context.api=async(path,method,body)=>{
+    calls.push({path,method,body});
+    return {originalAmountMinor:1000,correctedMinor:0,balanceMinor:1000,transferReference:'TEST',items:[],nextCursor:null};
+  };
+  context.rows=[{id:'old',userId:'sitter',amountMinor:1000,status:'approved',created:'2026-10-29'}];
+  vm.runInContext('renderTopups(rows)',context);
+  const card=get('#walletPanel').children.find(n=>n.tag==='article');
+  const details=card.children.find(n=>n.tag==='details'&&n.children[0].textContent.includes('Tushumni tuzatish'));
+  details.open=true;await details.ontoggle();
+  const form=details.children.find(n=>n.tag==='div').children.find(n=>n.tag==='form');
+  const fields=Object.fromEntries(form.children.filter(n=>n.tag==='label').map(n=>[n.children[0].name,n.children[0]]));
+  fields.correctionAmount.value='1';fields.correctionReason.value='TEST correction';fields.correctionConfirmed.checked=true;
+  vm.runInContext('renderTopups([])',context);
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(calls.filter(c=>c.method==='POST').length,0);
+});
 test('financial input uses exact hundredths and validates bounds', () => {
   const {context} = setup();
   assert.equal(vm.runInContext("parseMinor('15000.01')",context),1500001);
