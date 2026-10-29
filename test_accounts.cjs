@@ -134,3 +134,44 @@ test('late old index cannot replace a new role filter and detail errors can retr
   failDetail=false;await s.get('#detail').children[1].onclick();
   assert.match(text(s.get('#detail')),/TEST bbb/);
 });
+
+test('new legacy chat polls immediately and stale finalizer cannot unlock its poll',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const pending=[];
+  s.context.fetch=async(path)=>({ok:true,json:()=>new Promise((resolve,reject)=>pending.push({path,resolve,reject}))});
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='TEST'",s.context);
+  const old=vm.runInContext('refreshChat()',s.context);await tick();
+  vm.runInContext("state.selected='bbb';++state.chatVersion",s.context);
+  const latest=vm.runInContext('refreshChat()',s.context);await tick();
+  assert.deepEqual(pending.map(x=>x.path),['/api/admin/users/aaa/messages','/api/admin/users/bbb/messages']);
+  s.get('#notice').textContent='NEW VIEW';pending[0].reject(Error('OLD ERROR'));await old;
+  await vm.runInContext('refreshChat()',s.context);assert.equal(pending.length,2);
+  assert.equal(s.get('#notice').textContent,'NEW VIEW');
+  pending[1].resolve({messages:[{text:'NEW DATA',sitter:'OTHER'}]});await latest;
+  assert.equal(vm.runInContext('state.messages[0].text',s.context),'NEW DATA');
+  assert.equal(vm.runInContext('state.polling',s.context),false);
+});
+
+test('superseded legacy poll cannot become current again after switching back',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const pending=[];
+  s.context.fetch=async()=>({ok:true,json:()=>new Promise(resolve=>pending.push(resolve))});
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='A'",s.context);
+  const first=vm.runInContext('refreshChat()',s.context);await tick();
+  vm.runInContext("state.sitter='B'",s.context);const second=vm.runInContext('refreshChat()',s.context);await tick();
+  vm.runInContext("state.sitter='A'",s.context);const third=vm.runInContext('refreshChat()',s.context);await tick();
+  pending[2]({messages:[{text:'LATEST',sitter:'OTHER'}]});await third;
+  pending[0]({messages:[{text:'STALE A',sitter:'OTHER'}]});await first;
+  pending[1]({messages:[{text:'STALE B',sitter:'OTHER'}]});await second;
+  assert.equal(vm.runInContext('state.messages[0].text',s.context),'LATEST');
+});
+
+test('obsolete legacy remove button and delayed failure cannot affect a new view',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();let fail;const calls=[];
+  s.context.fetch=async(path)=>{calls.push(path);return {ok:true,json:()=>new Promise((_,reject)=>fail=reject)};};
+  s.context.prompt=()=> 'TEST reason';
+  vm.runInContext("state.selected='aaa';state.tab='chat';state.sitter='TEST';state.messages=[{id:'abc',sitter:'TEST',mine:false,text:'TEST',time:'2026-10-29'}];drawMessages()",s.context);
+  const button=s.get('#messages').children[0].children.find(n=>n.tag==='button');
+  const removing=button.onclick();await tick();vm.runInContext("state.sitter='OTHER';drawMessages();state.sitter='TEST';drawMessages()",s.context);
+  s.get('#notice').textContent='NEW VIEW';fail(Error('OLD REMOVE ERROR'));await removing;
+  assert.equal(s.get('#notice').textContent,'NEW VIEW');
+  await button.onclick();assert.deepEqual(calls,['/api/admin/messages/abc']);
+});

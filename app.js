@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let authGeneration=0,accountRenderGeneration=0;
+let authGeneration=0,accountRenderGeneration=0,messageRenderGeneration=0;
 function accountViewScope(){
   const auth=authGeneration,render=accountRenderGeneration,detail=state.detailVersion,selected=state.selected,section=state.section,tab=state.tab;
   return ()=>auth===authGeneration&&render===accountRenderGeneration&&detail===state.detailVersion&&selected===state.selected&&section===state.section&&tab===state.tab&&state.panel==='accounts'&&!$('#app').hidden;
@@ -9,7 +9,7 @@ const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefine
 function notice(text){$('#notice').textContent=text;$('#notice').hidden=false;clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('#notice').hidden=true,5000)}
 function resetAdminView(){
   ++authGeneration;if(typeof resetWalletAdmin==='function')resetWalletAdmin();state.operator=null;state.users=[];state.listings=[];state.messages=[];state.sitters={};state.image=null;state.detailRecord=null;state.selected=null;state.panel='signed-out';
-  ++state.indexVersion;++state.detailVersion;state.indexLoading=false;
+  ++state.indexVersion;++state.detailVersion;++state.chatVersion;state.polling=false;state.indexLoading=false;
   for(const id of ['userList','detail','chatPanel','walletPanel'])$('#'+id).replaceChildren();
   $('#operatorIdentity').textContent='';$('#app').hidden=true;$('#login').hidden=false;
 }
@@ -178,13 +178,43 @@ function renderChat(box,u){
   box.append(form,el('p','Javob Momiq yordam xizmati nomidan yuboriladi. Mijoz muallifni ko‘radi; admin amali audit jurnalida saqlanadi.','meta'));refreshChat(true);
 }
 async function refreshChat(scroll=false){
-  if(state.panel!=='accounts'||state.section==='listings'||!state.selected||state.tab!=='chat'||state.polling||$('#app').hidden)return;
-  state.polling=true;const uid=state.selected,version=state.chatVersion,detailVersion=state.detailVersion;
-  const current=()=>uid===state.selected&&version===state.chatVersion&&detailVersion===state.detailVersion&&state.panel==='accounts'&&state.tab==='chat'&&!$('#app').hidden;
+  if(state.panel!=='accounts'||state.section==='listings'||!state.selected||state.tab!=='chat'||$('#app').hidden)return;
+  // Only the current view owns its poll; an obsolete request must not stall it.
+  if(state.polling&&state.polling.current())return;
+  const view=accountViewScope(),uid=state.selected,version=state.chatVersion,sitter=state.sitter;
+  const current=()=>view()&&version===state.chatVersion&&sitter===state.sitter&&state.polling===pending;
+  const pending={current};state.polling=pending;
   try{const data=await api('users/'+uid+'/messages');if(current()){state.messages=data.messages;drawMessages(scroll);}}
-  catch(e){if(current())notice(e.message);}finally{state.polling=false;}
+  catch(e){if(current())notice(e.message);}
+  finally{if(state.polling===pending)state.polling=false;}
 }
-function drawMessages(scroll=false){const box=$('#messages');if(!box)return;const wasBottom=box.scrollHeight-box.scrollTop-box.clientHeight<50;const previous=box.scrollTop;box.replaceChildren();const messages=state.messages.filter(x=>x.sitter===state.sitter);if(!messages.length)box.append(el('p','Hali xabar yo‘q. Suhbatni boshlang.'));for(const m of messages){const bubble=el('div',undefined,m.mine?'bubble':'bubble reply');if(m.image){const img=el('img');img.src=source(m.image);img.alt='Yuborilgan rasm';bubble.append(img)}if(m.text)bubble.append(el('div',m.text));bubble.append(el('small',(m.mine?'Mijoz':'Momiq yordam xizmati')+' · '+new Date(m.time).toLocaleString('uz-UZ')));const del=el('button','O‘chirish');del.onclick=async()=>{if(del.disabled)return;const reason=prompt('Xabarni o‘chirish sababi (matn va rasm qayta tiklanmaydi):');if(reason===null)return;if(!reason.trim()){notice('Sababni kiriting.');return;}del.disabled=true;try{await api('messages/'+m.id,'DELETE',{reason:reason.trim()});await refreshChat()}catch(e){notice(e.message)}finally{del.disabled=false}};bubble.append(del);box.append(bubble)}box.scrollTop=scroll||wasBottom?box.scrollHeight:previous}
+function drawMessages(scroll=false){
+  const box=$('#messages');if(!box)return;
+  const view=accountViewScope(),version=state.chatVersion,sitter=state.sitter,render=++messageRenderGeneration;
+  const current=()=>view()&&version===state.chatVersion&&sitter===state.sitter&&render===messageRenderGeneration;
+  const wasBottom=box.scrollHeight-box.scrollTop-box.clientHeight<50,previous=box.scrollTop;
+  box.replaceChildren();const messages=state.messages.filter(x=>x.sitter===sitter);
+  if(!messages.length)box.append(el('p','Hali xabar yo‘q. Suhbatni boshlang.'));
+  for(const m of messages){
+    const bubble=el('div',undefined,m.mine?'bubble':'bubble reply');
+    if(m.image){const img=el('img');img.src=source(m.image);img.alt='Yuborilgan rasm';bubble.append(img);}
+    if(m.text)bubble.append(el('div',m.text));
+    bubble.append(el('small',(m.mine?'Mijoz':'Momiq yordam xizmati')+' · '+new Date(m.time).toLocaleString('uz-UZ')));
+    const del=el('button','O‘chirish');
+    del.onclick=async()=>{
+      if(!current()||del.disabled)return;
+      const reason=prompt('Xabarni o‘chirish sababi (matn va rasm qayta tiklanmaydi):');
+      if(reason===null)return;
+      if(!reason.trim()){notice('Sababni kiriting.');return;}
+      del.disabled=true;
+      try{await api('messages/'+m.id,'DELETE',{reason:reason.trim()});if(current())await refreshChat();}
+      catch(e){if(current())notice(e.message);}
+      finally{if(current())del.disabled=false;}
+    };
+    bubble.append(del);box.append(bubble);
+  }
+  box.scrollTop=scroll||wasBottom?box.scrollHeight:previous;
+}
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await api('login','POST',{username:e.target.username.value,password:e.target.password.value});e.target.password.value='';await startAdmin()}catch(e){notice(e.message)}finally{b.disabled=false}};
 $('#logout').onclick=async()=>{try{await api('logout','POST',{});resetAdminView()}catch(e){notice(e.message)}};
 let indexSearchTimer;$('#refresh').onclick=()=>load();$('#search').oninput=()=>{renderList();clearTimeout(indexSearchTimer);indexSearchTimer=setTimeout(()=>load(),300);};$('#accountStatus').onchange=()=>load();$('#listingService').onchange=()=>load();
