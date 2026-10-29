@@ -13,6 +13,15 @@ const summary=id=>({id,roles:['customer'],phone:'998000000001',blocked:false,cre
 const full=id=>({...summary(id),_summary:false,account:{_revision:4,profile:{first:'TEST '+id,last:'User',photo:null},favorites:[],addresses:[],pets:[]}});
 const text=n=>[n.textContent,...n.children.map(text)].join(' ');
 
+test('legacy removal requires an explicit reason and sends only that reason',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const writes=[];
+  s.context.fetch=async(path,options)=>{writes.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({ok:true})};};
+  vm.runInContext("state.sitter='TEST sitter';state.messages=[{id:'abc',sitter:'TEST sitter',mine:false,text:'TEST message',time:'2026-10-29'}];drawMessages()",s.context);
+  const button=s.get('#messages').children[0].children.find(n=>n.tag==='button');
+  s.context.prompt=()=>null;await button.onclick();s.context.prompt=()=> '  ';await button.onclick();assert.equal(writes.length,0);
+  s.context.prompt=()=> ' TEST reason ';await button.onclick();assert.deepEqual(writes,[{path:'/api/admin/messages/abc',body:{reason:'TEST reason'}}]);assert.equal(button.disabled,false);
+});
+
 test('delayed legacy reply and image selection stay with the originating customer view',async()=>{
   const s=setup(()=>({users:[],sitters:{}}));await tick();s.context.crypto=require('node:crypto').webcrypto;s.context.u=full('aaa');
   let reply,image;

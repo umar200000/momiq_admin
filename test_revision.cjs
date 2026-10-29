@@ -68,8 +68,10 @@ test('profile save sends the loaded revision and preserves conflicts for review'
   get('#userList').children[0].onclick();
   const form=get('#detail').children.find(node=>node.tag==='form');
   form.elements={first:{value:'Changed'},last:{value:'User'}};
+  await form.onsubmit({preventDefault(){}});assert.equal(submitted,undefined);
+  form.children.find(n=>n.tag==='label'&&n.children.some(c=>c.tag==='textarea')).children[0].value='TEST operator correction';
   await form.onsubmit({preventDefault(){}});
-  assert.equal(submitted._revision,7);
+  assert.equal(submitted._revision,7);assert.equal(submitted.reason,'TEST operator correction');
   assert.equal(submitted.account.profile.first,'Changed');
   assert.equal(get('#notice').textContent,'Profile changed; reload');
   assert.equal(user.account.profile.first,'Test');

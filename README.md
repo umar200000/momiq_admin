@@ -41,3 +41,6 @@ Ish navbati (schema25) lists active support, listing and reported-chat work with
 
 
 Delayed legacy reply, attachment picker and transcript polling results are bound to the originating customer/detail view. They cannot replace another selected customer’s data. An uncertain reply freezes its exact text/image/sitter/request ID until retry succeeds; a new message gets a new ID. Review/chat moderation results and private-history loads similarly stop updating after navigation. The 47-test Node suite includes delayed navigation, duplicate submit and uncertainty regressions.
+
+
+Profile saves and block/unblock actions require an internal audit reason. The paired backend atomically records the real operator and bounded before/after state; it rejects old forms that omit the reason. Legacy message deletion also requires a reason and explains that stored text/image cannot be restored; a retry does not create a second deletion audit. This does not replace the newer chat-report evidence/appeal workflow.
