@@ -12,14 +12,14 @@ function setup(identity){
 }
 
 test('operator role is loaded before any private index and only granted panels are visible',async()=>{
-  for(const [role,panels] of [['support',['support']],['finance',['topups']],['moderation',['listings','chatReports','reviews']]]){
+  for(const [role,panels] of [['support',['support']],['finance',['topups','metrics']],['moderation',['listings','chatReports','reviews']]]){
     const s=setup({username:'<TEST operator>',role,panels});await tick();
     assert.equal(s.calls[0],'/api/admin/me');
     assert.equal(s.calls.some(path=>path.includes('/users')),false);
-    for(const id of ['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings'])assert.equal(s.get('#'+id+'Nav').hidden,!panels.includes(id));
+    for(const id of ['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings','metrics'])assert.equal(s.get('#'+id+'Nav').hidden,!panels.includes(id));
     assert.match(s.get('#operatorIdentity').textContent,/<TEST operator>/);
     assert.equal(s.get('#app').hidden,false);
-    if(role!=='moderation')assert.deepEqual(s.opened,panels);
+    if(role!=='moderation')assert.deepEqual(s.opened,[panels[0]]);
   }
 });
 

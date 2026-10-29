@@ -12,7 +12,7 @@ async function openChatReports() {
   $('#walletPanel').hidden = true;
   const panel = $('#chatPanel'); panel.hidden = false;
   $('#heading').textContent = 'Chat shikoyatlari';
-  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav']) {
+  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav']) {
     $('#'+id).classList.toggle('active', id === 'chatReportsNav');
   }
   $('#refresh').onclick = openChatReports;

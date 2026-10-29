@@ -6,7 +6,7 @@ async function openAdminBookings(identity=null,filter={status:'all',q:''}){
   state.panel='bookings';state.tab='profile';++chatReportGeneration;
   for(const id of ['accountWorkspace','accountStats','walletPanel'])$('#'+id).hidden=true;
   panel.hidden=false;panel.replaceChildren(el('p','Yuklanmoqda…'));$('#heading').textContent='Buyurtmalar';
-  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav'])$('#'+id).classList.toggle('active',id==='bookingsNav');
+  for(const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav'])$('#'+id).classList.toggle('active',id==='bookingsNav');
   const current=()=>generation===adminBookingGeneration&&state.panel==='bookings'&&!panel.hidden;
   $('#refresh').onclick=()=>openAdminBookings(identity,filter);
   try{

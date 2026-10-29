@@ -7,7 +7,7 @@ async function openReviews() {
   $('#accountWorkspace').hidden = true; $('#accountStats').hidden = true; $('#walletPanel').hidden = true;
   const panel = $('#chatPanel'); panel.hidden = false;
   $('#heading').textContent = 'Buyurtma sharhlari';
-  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav']) {
+  for (const id of ['usersNav','sittersNav','listingsNav','topupsNav','settingsNav','chatReportsNav','reviewsNav','supportNav','disputesNav','bookingsNav','metricsNav']) {
     $('#'+id).classList.toggle('active', id === 'reviewsNav');
   }
   $('#refresh').onclick = openReviews;
