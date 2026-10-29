@@ -3,8 +3,8 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(respond){
   class E{constructor(tag,text){this.tag=tag;this.textContent=text||'';this.children=[];this.value='';this.hidden=false;this.disabled=false;this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[];const get=id=>{if(!nodes.has(id))nodes.set(id,new E('div'));return nodes.get(id);};
-  const context=vm.createContext({document:{querySelector:get,createElement:tag=>new E(tag)},URLSearchParams,structuredClone,console,setInterval(){},setTimeout(){},clearTimeout(){},fetch:async(path,options)=>{
-    calls.push({path,method:options.method});return {ok:true,json:()=>respond(path)};
+  const context=vm.createContext({document:{addEventListener:(_,callback)=>queueMicrotask(callback),querySelector:get,createElement:tag=>new E(tag)},URLSearchParams,structuredClone,console,setInterval(){},setTimeout(){},clearTimeout(){},fetch:async(path,options)=>{
+    calls.push({path,method:options.method});return {ok:true,json:()=>path.endsWith('/me')?{username:'TEST operator',role:'administrator',panels:['users','sitters','listings']}:respond(path)};
   }});
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   return {context,get,calls};
@@ -38,7 +38,7 @@ test('page failure retains rows and retry uses same cursor with deduplication',a
   assert.match(text(s.get('#userList')),/TEST aaa/);assert.match(text(s.get('#userList')),/TEST page unavailable/);
   failed=false;await vm.runInContext('load(true)',s.context);
   assert.equal(vm.runInContext('state.users.length',s.context),2);
-  assert.equal(s.calls[1].path,s.calls[2].path);
+  const pages=s.calls.filter(c=>c.path.includes('after='));assert.equal(pages.length,2);assert.equal(pages[0].path,pages[1].path);
   assert.equal(vm.runInContext('state.indexNext',s.context),null);
 });
 

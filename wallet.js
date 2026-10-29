@@ -2,6 +2,8 @@
 let walletSection = 'topups';
 let topupStatus = 'pending';
 let topupRows = [];
+let walletGeneration = 0;
+function resetWalletAdmin() { topupRows = []; ++walletGeneration; }
 
 function parseMinor(value, allowZero = false) {
   const normalized = value.trim().replaceAll(',', '.');
@@ -26,6 +28,8 @@ function walletImage(data, label) {
 }
 
 async function openWalletAdmin(section) {
+  const generation = ++walletGeneration;
+  state.panel = 'wallet';
   walletSection = section;
   $('#chatPanel').hidden = true;
   state.tab = 'profile';
@@ -38,12 +42,13 @@ async function openWalletAdmin(section) {
   }
   $('#refresh').onclick = () => openWalletAdmin(walletSection);
   const panel = $('#walletPanel');
+  const current = () => generation === walletGeneration && state.panel === 'wallet' && !panel.hidden;
   panel.replaceChildren(el('p', 'Yuklanmoqda…'));
   try {
-    if (section === 'settings') renderWalletSettings(await api('platform-settings'));
-    else { const page = await api('topups?status=' + topupStatus); topupRows = page.topups; renderTopups(topupRows, page.nextCursor); }
+    if (section === 'settings') { const settings=await api('platform-settings');if(current())renderWalletSettings(settings); }
+    else { const page = await api('topups?status=' + topupStatus);if(current()){ topupRows = page.topups; renderTopups(topupRows, page.nextCursor); } }
   } catch (error) {
-    panel.replaceChildren(el('p', error.message));
+    if(current())panel.replaceChildren(el('p', error.message));
   }
 }
 
