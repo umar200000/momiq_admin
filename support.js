@@ -27,11 +27,23 @@ async function openSupport(identity=null,draft=null) {
 }
 function renderSupportThread(panel,page,current=()=>true,draft=null){
   const row=page.ticket,appeal=page.target?.purpose==='appeal',decisionVersion=page.decisionContext?.version;
-  const canResolve=page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion));
+  const dispute=row.topic==='dispute_appeal', eventId=page.disputeAppeal?.eventId;
+  const canResolve=page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion))
+    &&(!dispute||page.canResolve===true&&page.disputeAppeal?.bookingId===row.bookingId&&typeof eventId==='string'&&/^[1-9][0-9]{0,17}$/.test(eventId));
   panel.append(el('h2',row.subject),el('p',row.topic+' · '+row.status+' · v'+row.revision),el('p','Murojaat #'+row.id,'meta'));
   if(page.videoReport)panel.append(el('p','Video hisobot #'+page.videoReport.id+' · '+page.videoReport.day+' · '+page.videoReport.slot));
   if(row.topic==='account_deletion')panel.append(el('p','Hisob egasi hisobini o‘chirish bo‘yicha so‘rov yuborgan. Murojaatni yopish hisobni o‘chirish amali hisoblanmaydi.','meta'));
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
+  if(dispute){
+    panel.append(el('h3','Nizo qarori bo‘yicha apellyatsiya'),el('p','Qaror #'+(eventId||'—')));
+    if(canResolve){
+      panel.append(el('p',page.disputeAppeal.reason),el('p','Qaror: '+page.disputeAppeal.outcome));
+      const open=el('button','Nizo tafsilotlarini ko‘rish','secondary');
+      open.onclick=()=>{if(current())return openDisputes(row.bookingId,'resolved');};panel.append(open);
+    }
+    const queue=el('button','Ish navbatini ochish','secondary');
+    queue.onclick=()=>{if(current())return openWorkQueue('support','all',row.id);};panel.append(queue);
+  }
   if(page.target){
     const target=page.target,box=el('section');
     box.append(el('h3',target.purpose==='appeal'?'Qarorni qayta ko‘rib chiqish':target.kind==='review'?'Sharhga shikoyat':'E’lon/profilga shikoyat'),el('p','Manba #'+target.id+' · '+target.capturedAt));
@@ -80,7 +92,7 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
   form.onsubmit=async event=>{
     event.preventDefault();if(picking||sending||!current()||(!pending&&!body.value.trim()))return;
     if(!pending&&action.value==='resolve'&&!canResolve)return;
-    pending??={text:body.value.trim(),image,action:action.value,revision:row.revision,requestId:crypto.randomUUID(),...(appeal&&action.value==='resolve'?{decisionVersion}:{})};
+    pending??={text:body.value.trim(),image,action:action.value,revision:row.revision,requestId:crypto.randomUUID(),...(appeal&&action.value==='resolve'?{decisionVersion}:{}),...(dispute&&action.value==='resolve'?{reviewedDisputeEventId:eventId}:{})};
     sending=true;send.disabled=true;body.disabled=true;action.disabled=true;attachment.disabled=true;
     try{
       const result=await api('support/'+row.id,'POST',pending);
@@ -90,12 +102,13 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
          result.ticket.revision<pending.revision+1 || receipt?.ticketId!==row.id ||
          receipt.requestId!==pending.requestId || receipt.action!==pending.action ||
          receipt.revision!==pending.revision+1 || typeof receipt.messageId!=='string' ||
-         !/^[1-9][0-9]{0,17}$/.test(receipt.messageId)){
+         !/^[1-9][0-9]{0,17}$/.test(receipt.messageId) ||
+         (dispute && (result.disputeAppeal?.eventId!==eventId || result.disputeAppeal?.bookingId!==row.bookingId))){
         throw Error('Murojaat tasdig‘i mos kelmadi.');
       }
       await openSupport(row.id);
     }
-    catch(e){if(current()){notice(e.message);send.textContent='Ayni javobni qayta yuborish';if(appeal&&pending.action==='resolve'&&[409,428].includes(e.status))reloadDecision.hidden=false;}}
+    catch(e){if(current()){notice(e.message);send.textContent='Ayni javobni qayta yuborish';if((appeal||dispute)&&pending.action==='resolve'&&[409,428].includes(e.status))reloadDecision.hidden=false;}}
     finally{if(current()){sending=false;send.disabled=false;}}
   };
 }

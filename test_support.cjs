@@ -15,6 +15,21 @@ test('private support history renders untrusted content as text and images load 
   assert.equal(card.children[1].textContent,'<script>untrusted</script>');assert.equal(card.children[1].tag,'p');assert.equal(calls.length,0);
   const button=card.children.find(n=>n.tag==='button');await button.onclick();assert.match(calls[0].path,/\/messages\/1\/image$/);assert.equal(button.hidden,true);
 });
+test('dispute appeal closure uses the visible immutable decision and support cannot resolve',async()=>{
+  for(const allowed of [false,true]){
+    const s=setup(),panel=s.get('#chatPanel');
+    Object.assign(s.context.page.ticket,{topic:'dispute_appeal',bookingId:'c'.repeat(32)});
+    s.context.page.canResolve=allowed;
+    s.context.page.disputeAppeal={bookingId:'c'.repeat(32),eventId:'42',revision:2};
+    panel.replaceChildren();vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",s.context);
+    const form=panel.children.find(n=>n.tag==='form'),action=form.children[2];
+    assert.equal(action.children.some(o=>o.value==='resolve'),allowed);
+    form.children[0].children[0].value='TEST reviewed';action.value='resolve';s.setFail(true);
+    await form.onsubmit({preventDefault(){}});
+    if(allowed)assert.equal(s.calls[0].body.reviewedDisputeEventId,'42');
+    else assert.equal(s.calls.length,0);
+  }
+});
 test('reply failure locks content and retries same revision and idempotency key',async()=>{
   const {get,calls,setFail}=setup();const form=get('#chatPanel').children.find(n=>n.tag==='form'),body=form.children[0].children[0],action=form.children[2];
   await form.onsubmit({preventDefault(){}});assert.equal(calls.length,0);
