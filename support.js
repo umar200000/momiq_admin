@@ -81,7 +81,19 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
     if(!pending&&action.value==='resolve'&&!canResolve)return;
     pending??={text:body.value.trim(),image,action:action.value,revision:row.revision,requestId:crypto.randomUUID(),...(appeal&&action.value==='resolve'?{decisionVersion}:{})};
     sending=true;send.disabled=true;body.disabled=true;action.disabled=true;attachment.disabled=true;
-    try{await api('support/'+row.id,'POST',pending);if(current())await openSupport(row.id);}
+    try{
+      const result=await api('support/'+row.id,'POST',pending);
+      if(!current())return;
+      const receipt=result?.acknowledgement;
+      if(result?.ticket?.id!==row.id || !Number.isSafeInteger(result.ticket.revision) ||
+         result.ticket.revision<pending.revision+1 || receipt?.ticketId!==row.id ||
+         receipt.requestId!==pending.requestId || receipt.action!==pending.action ||
+         receipt.revision!==pending.revision+1 || typeof receipt.messageId!=='string' ||
+         !/^[1-9][0-9]{0,17}$/.test(receipt.messageId)){
+        throw Error('Murojaat tasdig‘i mos kelmadi.');
+      }
+      await openSupport(row.id);
+    }
     catch(e){if(current()){notice(e.message);send.textContent='Ayni javobni qayta yuborish';if(appeal&&pending.action==='resolve'&&[409,428].includes(e.status))reloadDecision.hidden=false;}}
     finally{if(current()){sending=false;send.disabled=false;}}
   };

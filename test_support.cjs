@@ -3,7 +3,10 @@ function setup(target=null,canResolve=true,decisionContext=undefined){
   class Element{constructor(tag,text){this.tag=tag;this.textContent=text||'';this.children=[];this.value='';this.hidden=false;this.disabled=false;this.style={};this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[],notices=[];const get=id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);};let fail=false;
   const page={target,canResolve,decisionContext:decisionContext===undefined&&target?.purpose==='appeal'&&canResolve?{version:'a'.repeat(64),snapshot:{kind:target.kind,id:target.id,status:'rejected'}}:decisionContext,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
-  const context=vm.createContext({state:{panel:'support'},chatReportGeneration:0,$:get,el:(tag,text)=>new Element(tag,text),crypto:require('node:crypto').webcrypto,source:v=>'data:image/png;base64,'+v,notice:t=>notices.push(t),readImage:async()=>null,api:async(path,method='GET',body)=>{calls.push({path,method,body});if(method==='POST'&&fail)throw Error('TEST response lost');return path.endsWith('/image')?{image:'TEST'}:page;},page,live:true});
+  const context=vm.createContext({state:{panel:'support'},chatReportGeneration:0,$:get,el:(tag,text)=>new Element(tag,text),crypto:require('node:crypto').webcrypto,source:v=>'data:image/png;base64,'+v,notice:t=>notices.push(t),readImage:async()=>null,api:async(path,method='GET',body)=>{calls.push({path,method,body});if(method==='POST'){
+    if(fail)throw Error('TEST response lost');
+    return {...page,ticket:{...page.ticket,revision:body.revision+1},acknowledgement:{ticketId:page.ticket.id,requestId:body.requestId,messageId:'2',revision:body.revision+1,action:body.action}};
+  }return path.endsWith('/image')?{image:'TEST'}:page;},page,live:true});
   vm.runInContext(fs.readFileSync('support.js','utf8'),context);vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",context);
   return {get,calls,notices,context,setFail:v=>fail=v};
 }
@@ -146,4 +149,20 @@ test('public photo reports identify the displayed housing photograph for the ope
   const box=get('#chatPanel').children.find(n=>n.tag==='section');
   assert.ok(box.children.some(n=>n.textContent==='Shikoyat qilingan rasm — uy rasmi 2'));
   assert.equal(calls.length,0);
+});
+
+test('unmatched support receipt keeps evidence and retries the same request',async()=>{
+  const s=setup(),sent=[];
+  const form=s.get('#chatPanel').children.find(n=>n.tag==='form'),body=form.children[0].children[0];
+  body.value='TEST retained answer';
+  s.context.api=async(path,method,request)=>{
+    if(method==='POST'){sent.push(request);return {...s.context.page,acknowledgement:{requestId:'unrelated'}};}
+    return s.context.page;
+  };
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(body.disabled,true);
+  assert.equal(body.value,'TEST retained answer');
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(sent.length,2);
+  assert.deepEqual(sent[1],sent[0]);
 });
