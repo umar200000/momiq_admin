@@ -141,3 +141,9 @@ test('content support handoff opens its own queue only from a current role-scope
   s.context.live=false;await button.onclick();assert.equal(opened.length,1);
   s.context.live=true;s.context.state.operator.role='finance';render();assert.equal(all(s.get('#chatPanel')).some(n=>n.textContent==='Ish navbati / administratorga yo‘naltirish'),false);
 });
+test('public photo reports identify the displayed housing photograph for the operator',()=>{
+  const {get,calls}=setup({kind:'listing',id:'abc:boarding',purpose:'report',capturedAt:'TEST',snapshot:{media:{slot:'home:1',sha256:'a'.repeat(64)}}});
+  const box=get('#chatPanel').children.find(n=>n.tag==='section');
+  assert.ok(box.children.some(n=>n.textContent==='Shikoyat qilingan rasm — uy rasmi 2'));
+  assert.equal(calls.length,0);
+});

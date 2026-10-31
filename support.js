@@ -29,11 +29,17 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
   const row=page.ticket,appeal=page.target?.purpose==='appeal',decisionVersion=page.decisionContext?.version;
   const canResolve=page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion));
   panel.append(el('h2',row.subject),el('p',row.topic+' · '+row.status+' · v'+row.revision),el('p','Murojaat #'+row.id,'meta'));
+  if(row.topic==='account_deletion')panel.append(el('p','Hisob egasi hisobini o‘chirish bo‘yicha so‘rov yuborgan. Murojaatni yopish hisobni o‘chirish amali hisoblanmaydi.','meta'));
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
   if(page.target){
     const target=page.target,box=el('section');
     box.append(el('h3',target.purpose==='appeal'?'Qarorni qayta ko‘rib chiqish':target.kind==='review'?'Sharhga shikoyat':'E’lon/profilga shikoyat'),el('p','Manba #'+target.id+' · '+target.capturedAt));
     box.append(el('p',target.purpose==='appeal'?'Yuborilgan paytdagi qaror nusxasi. Yakuniy javobni administrator yozadi. Yopish kontentni avtomatik tiklamaydi; ko‘rinish qarori tegishli moderatsiya bo‘limida alohida audit bilan bajariladi.':'Yuborilgan paytdagi ommaviy matn nusxasi. Bu rasm/video arxivi emas. Murojaatga javob berish yoki uni yopish kontentni yashirmaydi.','meta'));
+    const photo=target.snapshot?.media;
+    if(target.kind==='listing' && photo && typeof photo.slot==='string'){
+      const home=/^home:(0|[1-9][0-9]?)$/.exec(photo.slot);
+      if(photo.slot==='portrait'||home)box.append(el('p',photo.slot==='portrait'?'Shikoyat qilingan rasm — profil rasmi':'Shikoyat qilingan rasm — uy rasmi '+(Number(home[1])+1)));
+    }
     box.append(el('pre',JSON.stringify(target.snapshot,null,2)));
     if(appeal&&page.canResolve!==false){
       box.append(el('h3','Yopishda bog‘lanadigan amaldagi qaror'));
