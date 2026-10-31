@@ -29,6 +29,7 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
   const row=page.ticket,appeal=page.target?.purpose==='appeal',decisionVersion=page.decisionContext?.version;
   const canResolve=page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion));
   panel.append(el('h2',row.subject),el('p',row.topic+' · '+row.status+' · v'+row.revision),el('p','Murojaat #'+row.id,'meta'));
+  if(page.videoReport)panel.append(el('p','Video hisobot #'+page.videoReport.id+' · '+page.videoReport.day+' · '+page.videoReport.slot));
   if(row.topic==='account_deletion')panel.append(el('p','Hisob egasi hisobini o‘chirish bo‘yicha so‘rov yuborgan. Murojaatni yopish hisobni o‘chirish amali hisoblanmaydi.','meta'));
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
   if(page.target){

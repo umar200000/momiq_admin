@@ -166,3 +166,12 @@ test('unmatched support receipt keeps evidence and retries the same request',asy
   assert.equal(sent.length,2);
   assert.deepEqual(sent[1],sent[0]);
 });
+
+test('private video report shows only the reference without fetching media',()=>{
+  const s=setup();
+  s.context.page.videoReport={id:'e'.repeat(32),day:'2026-10-28',slot:'morning'};
+  const panel=s.get('#chatPanel');panel.replaceChildren();
+  vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",s.context);
+  assert.ok(panel.children.some(n=>n.textContent.includes('Video hisobot #'+s.context.page.videoReport.id)));
+  assert.equal(s.calls.length,0);
+});
