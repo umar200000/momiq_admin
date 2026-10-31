@@ -13,12 +13,29 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan reachable Git history for secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner="$RUNNER_TEMP/momiq-gitleaks"
+          mkdir -p "$scanner"
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 60 --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$scanner/release.tar.gz"
+          printf '%s  %s\n' '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$scanner/release.tar.gz" | sha256sum --check -
+          tar -xzf "$scanner/release.tar.gz" -C "$scanner" gitleaks
+          printf '[extend]\nuseDefault = true\n' > "$scanner/config.toml"
+          touch "$scanner/empty-ignore"
+          "$scanner/gitleaks" git . --log-opts=--all --config "$scanner/config.toml" --gitleaks-ignore-path "$scanner/empty-ignore" --ignore-gitleaks-allow --redact=100 --no-banner --timeout 120
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-      - run: node --check app.js
-      - run: node --test test_admin.cjs
+      - name: Check every panel JavaScript module
+        run: |
+          for source in *.js; do node --check "$source"; done
+      - name: Run every panel regression suite
+        run: node --test test_*.cjs
       - run: test -s index.html && test -s style.css
 
   deploy:

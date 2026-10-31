@@ -22,4 +22,28 @@ Open http://127.0.0.1:8080/admin/ . Local credentials are generated on the first
 Live admin: https://admin.momiq.net . Push to main runs JS checks and deploys the exact commit via GitHub Actions. Credentials are generated on the server in /var/lib/momiq/admin-login.txt (read via sudo); they are not committed. Backend operations and SSL instructions are in the backend DEPLOYMENT.md.
 
 ## Users and listings
-Mijozlar and Enagalar filter durable role memberships; dual-role accounts appear in both. E’lonlar displays real server listings and owner profiles. Listings are read-only here. Run `node --test test_admin.cjs` for navigation and listing rendering checks.
+Mijozlar and Enagalar filter durable role memberships; dual-role accounts appear in both. E’lonlar displays real server listings and owner profiles. Listing decisions require the current revision and a reason. Run `node --test test_admin.cjs` for navigation and listing rendering checks.
+
+
+Chat reports: the Chat shikoyatlari section lists paginated incoming-message reports. Evidence and image access are explicit and audited; the operator sees only the reported message, not the entire conversation. A decision requires the loaded revision and a reason. Hide preserves original evidence while removing participant text/image access; dismiss leaves the message visible. Stale/parallel review cannot overwrite another decision. Schema24 separates support, moderation, finance and administrator access. The panel requests the server-owned operator identity before loading any private index; only granted sections appear. Run `node --test test_admin.cjs test_revision.cjs test_wallet.cjs test_chat.cjs`.
+
+
+Booking details now open daily video reports with a date filter. Same-origin HttpOnly admin cookies authorize poster/playback requests; no token appears in URLs. Every access is audited by the server, and expired media has no player. This does not add generic upload, deletion, refund or status mutation. Full booking/care/video oversight is limited to administrators; MFA and real operator acceptance remain M092 release gates.
+
+
+Named operators are provisioned using the backend `manage_operators.py` command from a trusted console with a current administrator password. Support handles private tickets; moderation handles listings/reviews/reported chat evidence; finance handles top-up decisions and corrections. Account profiles, disputes and commission/QR configuration remain administrator-only. Role changes and disable revoke old sessions, and every API route enforces the role independently of the visible menu. The backend DEPLOYMENT.md describes provisioning and audit. MFA is still unfinished; this is not a completed production access rollout. Run `node --test test_*.cjs` on shells that expand file globs, or pass the explicit file list on Windows.
+
+
+Ko‘rsatkichlar loads only server-authorized aggregates. Finance sees wallet/receipt summaries; administrators also see booking, support and dispute counts and timing. The CSV link uses the HttpOnly cookie and a separate server authorization check, with fixed aggregate columns and no personal/evidence/message rows. Amounts use exact integer minor-unit strings/BigInt. A failed report offers retry, and late responses cannot overwrite another panel. Counts cover all recorded time/current statuses; open-ticket age and first-response mean are labelled explicitly. They are not provider transfer outcomes, a service-payment ledger, a fiscal statement or an SLA guarantee.
+
+
+Ish navbati (schema25) lists active support, listing and reported-chat work within the operator role. Administrators assign/reassign and explicitly set/clear a due time; eligible staff can claim unassigned work. Filters show own/unassigned/overdue items with bounded pagination. Closed-source detail and assignment history remain readable; source links open the existing reply/decision flow. Assignment has no financial or source-decision effect. Uncertain writes retain the exact payload/request ID; definite conflicts reload current state. No common support SLA, automatic escalation or additional customer messaging is implied.
+
+
+Delayed legacy reply, attachment picker and transcript polling results are bound to the originating customer/detail view. They cannot replace another selected customer’s data. An uncertain reply freezes its exact text/image/sitter/request ID until retry succeeds; a new message gets a new ID. Review/chat moderation results and private-history loads similarly stop updating after navigation. The 47-test Node suite includes delayed navigation, duplicate submit and uncertainty regressions.
+
+
+Profile saves and block/unblock actions require an internal audit reason. The paired backend atomically records the real operator and bounded before/after state; it rejects old forms that omit the reason. Legacy message deletion also requires a reason and explains that stored text/image cannot be restored; a retry does not create a second deletion audit. This does not replace the newer chat-report evidence/appeal workflow.
+
+
+`release-contract.json` declares backend contract 1 for release compatibility checks. The backend records the exact admin commit used in its CI fixture. Runtime deployment checks the declared contract and required assets before switching; initial paired rollout and installation of the privileged host script remain separate infrastructure work. A breaking API/UI change requires an explicit contract/version rollout, not silently changing this metadata to bypass the check.
