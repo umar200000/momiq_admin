@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 function setup(target=null,canResolve=true,decisionContext=undefined){
   class Element{constructor(tag,text){this.tag=tag;this.textContent=text||'';this.children=[];this.value='';this.hidden=false;this.disabled=false;this.style={};this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[],notices=[];const get=id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);};let fail=false;
-  const page={target,canResolve,decisionContext:decisionContext===undefined&&target?.purpose==='appeal'&&canResolve?{version:'a'.repeat(64),snapshot:{kind:target.kind,id:target.id,status:'rejected'}}:decisionContext,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
+  const page={target,canResolve,canRequestReportedPhoto:!!target?.snapshot?.media,decisionContext:decisionContext===undefined&&target?.purpose==='appeal'&&canResolve?{version:'a'.repeat(64),snapshot:{kind:target.kind,id:target.id,status:'rejected'}}:decisionContext,ticket:{id:'a'.repeat(32),subject:'TEST request',topic:'general',status:'open',revision:1},items:[{id:'1',authorRole:'owner',text:'<script>untrusted</script>',created:'TEST',action:'reply',hasImage:true}],nextCursor:null};
   const context=vm.createContext({state:{panel:'support'},chatReportGeneration:0,$:get,el:(tag,text)=>new Element(tag,text),crypto:require('node:crypto').webcrypto,source:v=>'data:image/png;base64,'+v,notice:t=>notices.push(t),readImage:async()=>null,api:async(path,method='GET',body)=>{calls.push({path,method,body});if(method==='POST'){
     if(fail)throw Error('TEST response lost');
     return {...page,ticket:{...page.ticket,revision:body.revision+1},acknowledgement:{ticketId:page.ticket.id,requestId:body.requestId,messageId:'2',revision:body.revision+1,action:body.action}};
@@ -159,11 +159,25 @@ test('content support handoff opens its own queue only from a current role-scope
   s.context.live=false;await button.onclick();assert.equal(opened.length,1);
   s.context.live=true;s.context.state.operator.role='finance';render();assert.equal(all(s.get('#chatPanel')).some(n=>n.textContent==='Ish navbati / administratorga yo‘naltirish'),false);
 });
-test('public photo reports identify the displayed housing photograph for the operator',()=>{
-  const {get,calls}=setup({kind:'listing',id:'abc:boarding',purpose:'report',capturedAt:'TEST',snapshot:{media:{slot:'home:1',sha256:'a'.repeat(64)}}});
+test('public photo reports load only the matching housing photograph on demand',async()=>{
+  const {get,calls,context}=setup({kind:'listing',id:'abc:boarding',purpose:'report',capturedAt:'TEST',snapshot:{media:{slot:'home:1',sha256:'a'.repeat(64)}}});
   const box=get('#chatPanel').children.find(n=>n.tag==='section');
   assert.ok(box.children.some(n=>n.textContent==='Shikoyat qilingan rasm — uy rasmi 2'));
   assert.equal(calls.length,0);
+  const button=box.children.find(n=>n.tag==='button');
+  const original={ticketId:'a'.repeat(32),slot:'home:1',sha256:'a'.repeat(64),image:'TEST'};
+  for(const change of [{ticketId:'b'.repeat(32)},{slot:'home:0'},{sha256:'0'.repeat(64)}]){
+    context.api=async()=>({...original,...change});
+    await button.onclick();assert.ok(!box.children.some(n=>n.tag==='img'));
+  }
+  let finish;context.api=()=>new Promise(resolve=>{finish=resolve;});
+  const late=button.onclick();context.live=false;finish(original);await late;
+  assert.ok(!box.children.some(n=>n.tag==='img'));
+  const fresh=setup({kind:'listing',id:'abc:boarding',snapshot:{media:{slot:'home:1',sha256:original.sha256}}});
+  fresh.context.api=async path=>{assert.equal(path,'support/'+original.ticketId+'/reported-photo');return original;};
+  const section=fresh.get('#chatPanel').children.find(n=>n.tag==='section');
+  await section.children.find(n=>n.tag==='button').onclick();
+  assert.ok(section.children.some(n=>n.tag==='img'&&n.src.endsWith('TEST')));
 });
 
 test('unmatched support receipt keeps evidence and retries the same request',async()=>{

@@ -51,7 +51,26 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
     const photo=target.snapshot?.media;
     if(target.kind==='listing' && photo && typeof photo.slot==='string'){
       const home=/^home:(0|[1-9][0-9]?)$/.exec(photo.slot);
-      if(photo.slot==='portrait'||home)box.append(el('p',photo.slot==='portrait'?'Shikoyat qilingan rasm — profil rasmi':'Shikoyat qilingan rasm — uy rasmi '+(Number(home[1])+1)));
+      if(photo.slot==='portrait'||home){
+        box.append(el('p',photo.slot==='portrait'?'Shikoyat qilingan rasm — profil rasmi':'Shikoyat qilingan rasm — uy rasmi '+(Number(home[1])+1)));
+        if(page.canRequestReportedPhoto===true && /^[a-f0-9]{64}$/.test(photo.sha256)){
+          const open=el('button','Shikoyat qilingan rasmni ko‘rish','secondary');
+          box.append(open);
+          open.onclick=async()=>{
+            if(!current()||open.disabled)return;
+            open.disabled=true;
+            try{
+              const result=await api('support/'+row.id+'/reported-photo');
+              if(!current())return;
+              if(result.ticketId!==row.id||result.slot!==photo.slot||result.sha256!==photo.sha256||typeof result.image!=='string'||!result.image)
+                throw new Error('Rasm murojaatga mos kelmadi.');
+              const img=el('img');img.src=source(result.image);img.alt='Shikoyatda ko‘rsatilgan e’lon rasmi';
+              img.style.maxWidth='100%';box.append(img);open.hidden=true;
+            }catch(error){if(current())notice(error.message);}
+            finally{if(current())open.disabled=false;}
+          };
+        }
+      }
     }
     box.append(el('pre',JSON.stringify(target.snapshot,null,2)));
     if(appeal&&page.canResolve!==false){
