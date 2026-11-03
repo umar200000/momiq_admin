@@ -13,6 +13,7 @@ async function openSupport(identity=null,draft=null) {
   try {
     if(identity){
       const page=await api('support/'+identity);if(!current())return;
+      if(page?.ticket?.id!==identity)throw Error('Murojaat raqami mos kelmadi.');
       panel.replaceChildren();const back=el('button','Murojaatlar ro‘yxati','secondary');back.onclick=()=>openSupport();panel.append(back);
       renderSupportThread(panel,page,current,draft);return;
     }
@@ -90,7 +91,18 @@ function renderSupportThread(panel,page,current=()=>true,draft=null){
     if(m.hasImage){const image=el('button','Maxfiy rasmni ochish','secondary');card.append(image);image.onclick=async()=>{image.disabled=true;try{const result=await api('support/'+row.id+'/messages/'+m.id+'/image');if(!current())return;const img=el('img');img.src=source(result.image);img.alt='Murojaatga biriktirilgan rasm';img.style.maxWidth='100%';card.append(img);image.hidden=true;}catch(e){if(current())notice(e.message);}finally{if(current())image.disabled=false;}};}
   }};draw();
   const older=el('button','Oldingi xabarlar','secondary');older.hidden=!cursor;panel.append(older);
-  older.onclick=async()=>{older.disabled=true;try{const next=await api('support/'+row.id+'?before='+encodeURIComponent(cursor));if(!current())return;const ids=new Set(messages.map(m=>m.id));messages=[...next.items.filter(m=>!ids.has(m.id)),...messages];cursor=next.nextCursor;older.hidden=!cursor;draw();}catch(e){if(current())notice(e.message);}finally{if(current())older.disabled=false;}};
+  older.onclick=async()=>{
+    older.disabled=true;
+    try{
+      const next=await api('support/'+row.id+'?before='+encodeURIComponent(cursor));
+      if(!current())return;
+      if(next?.ticket?.id!==row.id)throw Error('Murojaat raqami mos kelmadi.');
+      const ids=new Set(messages.map(m=>m.id));
+      messages=[...next.items.filter(m=>!ids.has(m.id)),...messages];
+      cursor=next.nextCursor;older.hidden=!cursor;draw();
+    }catch(e){if(current())notice(e.message);}
+    finally{if(current())older.disabled=false;}
+  };
   const form=el('form'),label=el('label','Javob yoki yopish sababi'),body=el('textarea');body.maxLength=4000;body.required=true;label.append(body);
   const attachment=el('input');attachment.type='file';attachment.accept='image/png,image/jpeg,image/webp';attachment.setAttribute('aria-label','Rasm biriktirish');
   const action=el('select');for(const [v,t] of [['reply','Javob yuborish'],...(canResolve?[['resolve','Sabab bilan yopish']]:[])]){const option=el('option',t);option.value=v;action.append(option);}action.value='reply';

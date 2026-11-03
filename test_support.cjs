@@ -37,6 +37,28 @@ test('reply failure locks content and retries same revision and idempotency key'
   await form.onsubmit({preventDefault(){}});assert.equal(body.disabled,true);assert.equal(action.disabled,true);
   await form.onsubmit({preventDefault(){}});assert.deepEqual(calls[0].body,calls[1].body);assert.equal(calls[0].body.action,'resolve');assert.equal(calls[0].body.revision,1);
 });
+test('detail and history refuse a response for a different support ticket',async()=>{
+  const {context,get,notices}=setup();
+  const panel=get('#chatPanel'), page=context.page, expected=page.ticket.id;
+  const foreign={...page,ticket:{...page.ticket,id:'b'.repeat(32),subject:'FOREIGN'},
+    items:[{...page.items[0],id:'8',text:'FOREIGN MESSAGE'}]};
+  context.api=async()=>foreign;
+  await vm.runInContext("openSupport(page.ticket.id)",context);
+  assert.equal(panel.children.some(node=>node.tag==='form'||node.textContent==='FOREIGN'),false);
+  page.nextCursor='1';panel.replaceChildren();
+  vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",context);
+  const older=panel.children.find(node=>node.textContent==='Oldingi xabarlar');
+  const history=panel.children.find(node=>node.tag==='div');
+  await older.onclick();
+  assert.equal(history.children.length,1);
+  assert.equal(history.children[0].children[1].textContent,page.items[0].text);
+  assert.equal(older.hidden,false);
+  context.api=async()=>({...foreign,ticket:{...page.ticket,id:expected}});
+  await older.onclick();
+  assert.equal(history.children.length,2);
+  assert.equal(older.hidden,true);
+  assert.equal(notices.length,1);
+});
 test('moving to a different view ignores late support response',async()=>{
   const {context,get}=setup();let release;context.api=()=>new Promise(r=>release=r);
   const loading=vm.runInContext('openSupport()',context);context.state.panel='accounts';get('#chatPanel').replaceChildren('new view');
