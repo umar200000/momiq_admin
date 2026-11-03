@@ -2,15 +2,15 @@
 
 Backendni ishga tushiring va http://127.0.0.1:8080/admin/ ni oching.
 Panel shu serverdan xizmat qilinadi; alohida npm install talab qilinmaydi.
-Login: backend/data/admin-login.txt. Bu faylni Gitga yubormang.
+Admin kirish ma’lumotlari tanlangan data papkasidagi `admin-login.txt` faylida. Windows launcher standarti `.local/local`, preview uchun `.local/preview`.
 
 ## Clone from GitHub
 
-Clone the repositories into sibling folders. Keep the admin folder named `momiq_admin_panel` because the backend serves assets from that path.
+Clone the repositories into sibling folders. The backend looks for `momiq_admin` first, then `momiq_admin_panel`. Set `MOMIQ_ADMIN_DIR` to serve a different asset directory.
 
 ```sh
 git clone https://github.com/umar200000/momiq_backend.git
-git clone https://github.com/umar200000/momiq_admin.git momiq_admin_panel
+git clone https://github.com/umar200000/momiq_admin.git
 cd momiq_backend
 python server.py
 ```
