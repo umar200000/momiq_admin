@@ -15,6 +15,16 @@ test('private support history renders untrusted content as text and images load 
   assert.equal(card.children[1].textContent,'<script>untrusted</script>');assert.equal(card.children[1].tag,'p');assert.equal(calls.length,0);
   const button=card.children.find(n=>n.tag==='button');await button.onclick();assert.match(calls[0].path,/\/messages\/1\/image$/);assert.equal(button.hidden,true);
 });
+test('deletion remains open for a booking or dispute and then goes to verification',()=>{
+  const s=setup(),panel=s.get('#chatPanel'),page=s.context.page;
+  page.ticket.topic='account_deletion';page.canResolve=false;
+  for(const [state,marker] of [['waiting_for_obligations','ochiq nizo'],['awaiting_verification','tekshiriladi']]){
+    page.deletionReview={state,openDispute:state==='waiting_for_obligations',openBooking:false};
+    panel.replaceChildren();vm.runInContext("renderSupportThread($('#chatPanel'),page,()=>live)",s.context);
+    assert.ok(panel.children.some(n=>n.textContent.includes(marker)));
+    assert.ok(!panel.children.find(n=>n.tag==='form').children[2].children.some(o=>o.value==='resolve'));
+  }
+});
 test('dispute appeal closure uses the visible immutable decision and support cannot resolve',async()=>{
   for(const allowed of [false,true]){
     const s=setup(),panel=s.get('#chatPanel');

@@ -29,11 +29,21 @@ async function openSupport(identity=null,draft=null) {
 function renderSupportThread(panel,page,current=()=>true,draft=null){
   const row=page.ticket,appeal=page.target?.purpose==='appeal',decisionVersion=page.decisionContext?.version;
   const dispute=row.topic==='dispute_appeal', eventId=page.disputeAppeal?.eventId;
-  const canResolve=page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion))
+  const canResolve=row.topic!=='account_deletion'&&page.canResolve!==false&&(!appeal||typeof decisionVersion==='string'&&/^[a-f0-9]{64}$/.test(decisionVersion))
     &&(!dispute||page.canResolve===true&&page.disputeAppeal?.bookingId===row.bookingId&&typeof eventId==='string'&&/^[1-9][0-9]{0,17}$/.test(eventId));
   panel.append(el('h2',row.subject),el('p',row.topic+' · '+row.status+' · v'+row.revision),el('p','Murojaat #'+row.id,'meta'));
   if(page.videoReport)panel.append(el('p','Video hisobot #'+page.videoReport.id+' · '+page.videoReport.day+' · '+page.videoReport.slot));
-  if(row.topic==='account_deletion')panel.append(el('p','Hisob egasi hisobini o‘chirish bo‘yicha so‘rov yuborgan. Murojaatni yopish hisobni o‘chirish amali hisoblanmaydi.','meta'));
+  if(row.topic==='account_deletion'){
+    const review=page.deletionReview;
+    let message='Hisob egasi hisobini o‘chirish bo‘yicha so‘rov yuborgan.';
+    if(review?.state==='waiting_for_obligations'){
+      const reasons=[review.openBooking&&'faol bron',review.openDispute&&'ochiq nizo'].filter(Boolean).join(', ');
+      message+=' Kutilmoqda: '+reasons+'. Shu murojaat navbatda qoladi.';
+    }else if(review?.state==='awaiting_verification'){
+      message+=' Faol bron va ochiq nizo yo‘q. Hisob egasi va saqlanishi kerak bo‘lgan yozuvlar tekshiriladi.';
+    }
+    panel.append(el('p',message,'meta'));
+  }
   if(row.bookingId)panel.append(el('p','Buyurtma #'+row.bookingId));
   if(dispute){
     panel.append(el('h3','Nizo qarori bo‘yicha apellyatsiya'),el('p','Qaror #'+(eventId||'—')));
