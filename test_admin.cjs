@@ -53,11 +53,48 @@ test('role navigation separates users and renders server listings', async () => 
   const user=(id,roles)=>({id,roles,phone:'998900000000',blocked:false,created:'2026-01-01',account:{profile:{first:id,last:'Test',photo:'/9j/test'},favorites:[],addresses:[]}});
   const users=[user('customer',['customer']),user('sitter',['sitter']),user('both',['customer','sitter'])];
   const listing={id:'sitter:homeVisit',userId:'sitter',profile:users[1].account.profile,phone:users[1].phone,type:'homeVisit',price:55000,pets:['cat'],active:true,housing:'house',updated:'2026-01-01'};
-  const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},fetch:async path=>({ok:true,json:async()=>path.endsWith('/users')?{users,sitters:{}}:{listings:[listing]}}),setInterval(){},setTimeout(){},clearTimeout(){},structuredClone,console});
+  const edits=[];
+  let editResult={ok:true};
+  const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},fetch:async(path,options)=>{
+    if(options.method==='PUT'){
+      edits.push([path,JSON.parse(options.body)]);
+      return {ok:true,json:async()=>editResult};
+    }
+    return {ok:true,json:async()=>path.endsWith('/users')?{users,sitters:{}}:{listings:[listing]}};
+  },setInterval(){},setTimeout(){},clearTimeout(){},structuredClone,console});
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(get('#count').textContent,2);
   assert.equal(get('#userList').children[0].children[0].src,'data:image/jpeg;base64,/9j/test');
+  get('#userList').children[0].onclick();
+  const form=get('#detail').children.find(node=>node.onsubmit);
+  form.elements={first:{value:'customer'},last:{value:'Test'}};
+  const submit=()=>form.onsubmit({preventDefault(){}});
+  await submit();
+  assert.equal(edits.length,0);
+  form.elements.first.value=' Edited ';
+  editResult={};
+  await submit();
+  assert.equal(get('#notice').textContent,'Profil saqlangani tasdiqlanmadi.');
+  editResult={ok:true};
+  await submit();
+  const expected=['/api/admin/users/customer/profile',{before:{first:'customer'},after:{first:'Edited'}}];
+  assert.deepEqual(edits,[expected,expected]);
+  assert.equal(get('#notice').textContent,'Profil saqlandi');
+  const fresh=get('#detail').children.find(node=>node.onsubmit);
+  fresh.elements={first:{value:'customer'},last:{value:'Test'}};
+  const picker=fresh.children.flatMap(node=>node.children).find(node=>node.type==='file');
+  const reads=[];
+  context.readImage=()=>new Promise(resolve=>reads.push(resolve));
+  picker.files=[{}];
+  const slow=picker.onchange(), recent=picker.onchange();
+  await fresh.onsubmit({preventDefault(){}});
+  assert.equal(edits.length,2);
+  reads[1]('second-photo');await recent;
+  reads[0]('first-photo');await slow;
+  await fresh.onsubmit({preventDefault(){}});
+  assert.deepEqual(edits[2],['/api/admin/users/customer/profile',
+                             {before:{photo:'/9j/test'},after:{photo:'second-photo'}}]);
   get('#sittersNav').onclick();
   assert.equal(get('#count').textContent,2);
   assert.equal(get('#userList').children[0].children[0].src,'data:image/jpeg;base64,/9j/test');
