@@ -3,6 +3,44 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('retry of an unacknowledged operator reply reuses only its own ID',async()=>{
+  const nodes=new Map(), posted=[];
+  function element(tag){
+    return {tag,children:[],value:'',isConnected:true,hidden:false,
+      append(...children){this.children.push(...children)},replaceChildren(...children){this.children=children},
+      setAttribute(){},classList:{toggle(){}}};
+  }
+  const document={createElement:element,querySelector(selector){
+    if(!nodes.has(selector))nodes.set(selector,element('div'));
+    return nodes.get(selector);
+  }};
+  let counter=0, respond;
+  const context=vm.createContext({document,crypto:{randomUUID:()=>String(++counter)},
+    fetch:async(path,options)=>{
+      if(options.method!=='POST')return {ok:true,json:async()=>path.endsWith('users')?{users:[],sitters:{}}:{listings:[]}};
+      posted.push(JSON.parse(options.body));
+      return new Promise(resolve=>{respond=body=>resolve({ok:true,json:async()=>body})});
+    },setInterval(){},setTimeout(){},clearTimeout(){},console});
+  vm.runInContext(fs.readFileSync('app.js','utf8'),context);
+  await new Promise(resolve=>setImmediate(resolve));
+  context.box=element('div');
+  vm.runInContext("state.sitters={s1:'TEST'};state.sitter='s1';renderChat(box,{id:'abc',blocked:false})",context);
+  const form=context.box.children.find(node=>node.tag==='form'), input=form.children[0];
+  const submit=()=>form.onsubmit({preventDefault(){}});
+  input.value='A';
+  const first=submit();
+  await submit();assert.equal(posted.length,1);
+  respond({});await first;assert.equal(input.value,'A');
+  const retry=submit();assert.deepEqual(posted[1],posted[0]);
+  respond({messages:[]});await retry;assert.equal(input.value,'');
+  input.value='A';
+  const intentional=submit();assert.notEqual(posted[2].requestId,posted[0].requestId);
+  respond({});await intentional;
+  input.value='B';
+  const edited=submit();assert.notEqual(posted[3].requestId,posted[2].requestId);
+  respond({messages:[]});await edited;
+});
+
 test('role navigation separates users and renders server listings', async () => {
   class Element {
     constructor(){this.children=[];this.value='';this.hidden=false;this.textContent='';this.classList={toggle(){}};}
