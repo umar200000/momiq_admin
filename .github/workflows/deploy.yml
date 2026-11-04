@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Deploy tested commit
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -39,5 +40,14 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           trap 'rm -f ~/.ssh/momiq' EXIT
           ssh -i ~/.ssh/momiq -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 momiq-deploy@95.182.119.218 "$COMMIT_SHA"
-      - name: Verify HTTPS
-        run: curl --fail --retry 5 --retry-delay 3 https://admin.momiq.net/admin/
+      - name: Verify deployed admin files and backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in index.html app.js style.css; do
+            url="https://admin.momiq.net/admin/$file"
+            if [[ "$file" == index.html ]]; then url=https://admin.momiq.net/admin/; fi
+            curl --fail --silent --show-error --max-time 15 "$url" | cmp - "$file"
+          done
+          curl --fail --silent --show-error --max-time 15 https://api.momiq.net/api/ready |
+            python3 -c 'import json,re,sys; r=json.load(sys.stdin); sha=r.get("releaseSha"); assert r.get("ok") is True and r.get("mode")=="production" and isinstance(sha,str) and re.fullmatch("[a-f0-9]{40}",sha); print("Serving backend",sha)'
