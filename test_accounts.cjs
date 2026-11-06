@@ -111,7 +111,8 @@ test('page failure retains rows and retry uses same cursor with deduplication',a
     return {users:[summary('aaa'),summary('bbb')],nextCursor:null,sitters:{}};
   });
   await tick();await vm.runInContext('load(true)',s.context);
-  assert.match(text(s.get('#userList')),/TEST aaa/);assert.match(text(s.get('#userList')),/TEST page unavailable/);
+  assert.match(text(s.get('#userList')),/TEST aaa/);assert.match(text(s.get('#userList')),/Server javobini o‘qib bo‘lmadi/);
+  assert.doesNotMatch(text(s.get('#userList')),/TEST page unavailable/);
   failed=false;await vm.runInContext('load(true)',s.context);
   assert.equal(vm.runInContext('state.users.length',s.context),2);
   const pages=s.calls.filter(c=>c.path.includes('after='));assert.equal(pages.length,2);assert.equal(pages[0].path,pages[1].path);

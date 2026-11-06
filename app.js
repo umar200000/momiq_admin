@@ -16,9 +16,11 @@ function resetAdminView(){
 async function api(path,method='GET',body){
   const generation=authGeneration;
   const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});
-  const data=await r.json();
+  let data,invalidJson=false;
+  try{data=await r.json();}catch{invalidJson=true;}
   if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
-  if(!r.ok){if(r.status===401)resetAdminView();const error=Error(data.error||'Server xatosi');error.status=r.status;throw error;}
+  if(!r.ok){if(r.status===401)resetAdminView();const message=typeof data?.error==='string'&&data.error.trim()?data.error:(r.status===401?'Sessiya tugagan. Qayta kiring.':'Server xatosi');const error=Error(message);error.status=r.status;throw error;}
+  if(invalidJson)throw Error('Server javobini o‘qib bo‘lmadi. Qayta urinib ko‘ring.');
   return data;
 }
 async function startAdmin(){

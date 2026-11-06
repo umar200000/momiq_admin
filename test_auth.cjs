@@ -37,3 +37,41 @@ test('logout serializes requests and clears private state only after confirmatio
   s.pending[0].reply({ok:true});await leaving;
   assert.equal(vm.runInContext('state.messages.length',s.context),0);assert.equal(s.get('#app').hidden,true);assert.equal(s.get('#logout').disabled,false);
 });
+
+test('malformed unauthorized response clears private state with a retryable login error',async()=>{
+  for(const invalid of ['html','null']){
+    const s=setup();vm.runInContext("state.operator={username:'TEST'};state.panel='accounts';state.messages=[{text:'PRIVATE'}]",s.context);
+    s.get('#app').hidden=false;s.get('#chatPanel').append({textContent:'PRIVATE'});
+    s.context.fetch=async()=>({ok:false,status:401,json:async()=>{
+      if(invalid==='html')throw SyntaxError('PRIVATE upstream response');return null;
+    }});
+    await assert.rejects(vm.runInContext("api('me')",s.context),error=>error.status===401&&!error.message.includes('PRIVATE'));
+    assert.equal(s.get('#app').hidden,true);
+    assert.equal(vm.runInContext('state.messages.length',s.context),0);
+    assert.equal(s.get('#chatPanel').children.length,0);
+    assert.equal(vm.runInContext('state.operator',s.context),null);
+  }
+});
+
+test('late malformed unauthorized body cannot clear a newer operator session',async()=>{
+  const s=setup();let release;
+  s.context.fetch=async()=>({ok:false,status:401,json:()=>new Promise((_,reject)=>release=()=>reject(SyntaxError('PRIVATE old response')))});
+  const reading=vm.runInContext("api('me')",s.context);await tick();
+  vm.runInContext("resetAdminView();state.operator={username:'NEW'};state.panel='accounts';state.messages=[{text:'NEW PRIVATE'}]",s.context);
+  s.get('#app').hidden=false;release();
+  await assert.rejects(reading,/Sessiya o‘zgardi/);
+  assert.equal(vm.runInContext('state.operator.username',s.context),'NEW');
+  assert.equal(vm.runInContext('state.messages.length',s.context),1);
+  assert.equal(s.get('#app').hidden,false);
+});
+
+test('invalid success or server-error JSON preserves the view and omits raw parser contents',async()=>{
+  for(const status of [200,503]){
+    const s=setup();vm.runInContext("state.operator={username:'TEST'};state.panel='accounts'",s.context);
+    s.get('#app').hidden=false;
+    s.context.fetch=async()=>({ok:status===200,status,json:async()=>{throw SyntaxError('PRIVATE upstream response')}});
+    await assert.rejects(vm.runInContext("api('me')",s.context),error=>!error.message.includes('PRIVATE'));
+    assert.equal(vm.runInContext('state.operator.username',s.context),'TEST');
+    assert.equal(s.get('#app').hidden,false);
+  }
+});
