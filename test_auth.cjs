@@ -65,6 +65,22 @@ test('late malformed unauthorized body cannot clear a newer operator session',as
   assert.equal(s.get('#app').hidden,false);
 });
 
+test('unauthorized headers clear private state before a stalled response body finishes',async()=>{
+  const s=setup();let release;
+  vm.runInContext("state.operator={username:'TEST'};state.panel='accounts';state.messages=[{text:'PRIVATE'}]",s.context);
+  s.get('#app').hidden=false;
+  s.context.fetch=async()=>({ok:false,status:401,json:()=>new Promise(resolve=>release=resolve)});
+  const reading=vm.runInContext("api('me')",s.context);await tick();
+  try{
+    assert.equal(s.get('#app').hidden,true);
+    assert.equal(vm.runInContext('state.messages.length',s.context),0);
+    assert.equal(vm.runInContext('state.operator',s.context),null);
+  }finally{
+    release({error:'TEST session ended'});
+    await assert.rejects(reading,error=>error.status===401);
+  }
+});
+
 test('invalid success or server-error JSON preserves the view and omits raw parser contents',async()=>{
   for(const status of [200,503]){
     const s=setup();vm.runInContext("state.operator={username:'TEST'};state.panel='accounts'",s.context);
