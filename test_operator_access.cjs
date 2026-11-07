@@ -4,7 +4,7 @@ function setup(identity){
   class E{constructor(){this.children=[];this.value='';this.hidden=false;this.textContent='';this.classList={toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(){}}
   const nodes=new Map(),calls=[],opened=[];
   const get=id=>{if(!nodes.has(id))nodes.set(id,new E());return nodes.get(id);};
-  const context=vm.createContext({URLSearchParams,document:{addEventListener:(_,callback)=>queueMicrotask(callback),querySelector:get,createElement:()=>new E()},structuredClone,setInterval(){},setTimeout(){},clearTimeout(){},console,
+  const context=vm.createContext({AbortController,URLSearchParams,document:{addEventListener:(_,callback)=>queueMicrotask(callback),querySelector:get,createElement:()=>new E()},structuredClone,setInterval(){},setTimeout(){},clearTimeout(){},console,
     fetch:async(path,options)=>{calls.push(path);return {ok:true,json:async()=>path.endsWith('/me')?identity:{listings:[],users:[],sitters:{}}};},
     openSupport:async()=>{opened.push('support');},openWalletAdmin:async section=>{opened.push(section);}});
   vm.runInContext(fs.readFileSync('app.js','utf8'),context);

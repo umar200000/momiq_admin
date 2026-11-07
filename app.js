@@ -14,17 +14,29 @@ function resetAdminView(){
   $('#operatorIdentity').textContent='';$('#app').hidden=true;$('#login').hidden=false;
 }
 async function api(path,method='GET',body){
-  const generation=authGeneration;
-  const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});
-  if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
-  if(r.status===401)resetAdminView();
-  const responseGeneration=authGeneration;
-  let data,invalidJson=false;
-  try{data=await r.json();}catch{invalidJson=true;}
-  if(responseGeneration!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
-  if(!r.ok){const message=typeof data?.error==='string'&&data.error.trim()?data.error:(r.status===401?'Sessiya tugagan. Qayta kiring.':'Server xatosi');const error=Error(message);error.status=r.status;throw error;}
-  if(invalidJson)throw Error('Server javobini o‘qib bo‘lmadi. Qayta urinib ko‘ring.');
-  return data;
+  let generation=authGeneration,timedOut=false,unauthorized=false;
+  const transport=new AbortController();
+  const deadline=setTimeout(()=>{timedOut=true;transport.abort();},60000);
+  try{
+    const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',signal:transport.signal});
+    if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
+    unauthorized=r.status===401;
+    if(unauthorized){resetAdminView();generation=authGeneration;}
+    let data,invalidJson=false;
+    try{data=await r.json();}catch{invalidJson=true;}
+    if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
+    if(timedOut)throw Error('Request deadline');
+    if(!r.ok){const message=typeof data?.error==='string'&&data.error.trim()?data.error:(unauthorized?'Sessiya tugagan. Qayta kiring.':'Server xatosi');const error=Error(message);error.status=r.status;throw error;}
+    if(invalidJson)throw Error('Server javobini o‘qib bo‘lmadi. Qayta urinib ko‘ring.');
+    return data;
+  }catch(error){
+    if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
+    if(timedOut){
+      const message=unauthorized?'Sessiya tugagan. Qayta kiring.':method==='GET'?'Javob kutilgan vaqtda kelmadi. Qayta urinib ko‘ring.':'Javob kutilgan vaqtda kelmadi. Amal saqlangan bo‘lishi mumkin; holatni yangilab tekshiring.';
+      const failure=Error(message);failure.code='timeout';if(unauthorized)failure.status=401;throw failure;
+    }
+    throw error;
+  }finally{clearTimeout(deadline);}
 }
 async function startAdmin(){
   resetAdminView();const generation=authGeneration;
