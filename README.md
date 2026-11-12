@@ -2,6 +2,10 @@
 
 Backendni ishga tushiring va http://127.0.0.1:8080/admin/ ni oching.
 Panel shu serverdan xizmat qilinadi; alohida npm install talab qilinmaydi.
+
+Admin writes validate acknowledgements before success notices or form reloads. This covers account updates, legacy message deletion, listing/review/chat moderation, payment settings, top-up decisions/corrections, disputes/incidents and queue assignment/escalation. Where the API returns a versioned object, its target, decision and changed values are checked against the serialized request. The three existing `{ok:true}` contracts are checked explicitly; they do not claim to provide a new target/request-ID receipt. An ambiguous 2xx keeps the form or frozen retry and asks the operator to check the saved state. Legacy deletion retains the reason for an explicit retry. A queue retry accepts its original event even if the current assignment has changed.
+
+Run `node --test test_*.cjs`. For compatibility with actual responses from isolated backend HTTP tests, run `python tool/check_admin_write_receipts.py --admin ../momiq_admin` from the sibling backend checkout. This allowlisted probe covers all twelve write routes without production or provider access.
 Admin kirish ma’lumotlari tanlangan data papkasidagi `admin-login.txt` faylida. Windows launcher standarti `.local/local`, preview uchun `.local/preview`.
 
 ## Clone from GitHub

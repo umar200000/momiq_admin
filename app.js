@@ -15,10 +15,11 @@ function resetAdminView(){
 }
 async function api(path,method='GET',body){
   let generation=authGeneration,timedOut=false,unauthorized=false;
+  const encoded=body?JSON.stringify(body):undefined,submitted=encoded?JSON.parse(encoded):undefined;
   const transport=new AbortController();
   const deadline=setTimeout(()=>{timedOut=true;transport.abort();},60000);
   try{
-    const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',redirect:'error',signal:transport.signal});
+    const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:encoded,credentials:'same-origin',redirect:'error',signal:transport.signal});
     if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
     unauthorized=r.status===401;
     if(unauthorized){resetAdminView();generation=authGeneration;}
@@ -28,6 +29,7 @@ async function api(path,method='GET',body){
     if(timedOut)throw Error('Request deadline');
     if(!r.ok){const message=typeof data?.error==='string'&&data.error.trim()?data.error:(unauthorized?'Sessiya tugagan. Qayta kiring.':'Server xatosi');const error=Error(message);error.status=r.status;throw error;}
     if(invalidJson)throw Error('Server javobini o‘qib bo‘lmadi. Qayta urinib ko‘ring.');
+    validateWriteReceipt(path,method,submitted,data);
     return data;
   }catch(error){
     if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
@@ -37,6 +39,54 @@ async function api(path,method='GET',body){
     }
     throw error;
   }finally{clearTimeout(deadline);}
+}
+// Validate only documented write responses. A 2xx is not proof that the
+// submitted operation was acknowledged. Keep existing form/retry state on error.
+function validateWriteReceipt(path,method,body,data){
+  if(method==='GET')return;
+  const object=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  const integer=v=>Number.isSafeInteger(v)&&v>=0;
+  const next=(value,previous)=>integer(value)&&integer(previous)&&value===previous+1;
+  const nonempty=v=>typeof v==='string'&&!!v.trim();
+  const sameTime=(a,b)=>a===null&&b===null||typeof a==='string'&&typeof b==='string'&&Number.isFinite(Date.parse(a))&&Date.parse(a)===Date.parse(b);
+  const reason=typeof body?.reason==='string'?body.reason.trim():undefined;
+  let match,valid=true;
+  if(method==='PUT'&&/^users\/[^/]+$/.test(path)||method==='DELETE'&&/^messages\/[^/]+$/.test(path)||method==='POST'&&/^reviews\/[^/]+\/moderate$/.test(path)){
+    valid=object(data)&&data.ok===true;
+  }else if(method==='POST'&&(match=/^listings\/[^/]+\/([^/]+)\/review$/.exec(path))){
+    const service=decodeURIComponent(match[1]),moderation=data?.moderation?.[service];
+    valid=object(data)&&next(data._revision,body?._revision)&&Array.isArray(data.listings)&&data.listings.some(item=>item?.type===service)&&object(moderation)&&
+      moderation.status===({approve:'approved',reject:'rejected',suspend:'suspended'})[body?.decision]&&nonempty(moderation.status)&&moderation.reason===reason&&moderation.testOnly===(body?.testOnly??false);
+  }else if(method==='PUT'&&path==='platform-settings'){
+    valid=object(data)&&next(data.version,body?.version)&&integer(data.commissionBps)&&data.commissionBps<=10000&&typeof data.testOnly==='boolean'&&typeof data.qrActive==='boolean'&&
+      ['commissionBps','testOnly','qrActive'].every(key=>!(key in body)||data[key]===body[key])&&
+      ['recipientName','paymentInstructions'].every(key=>typeof data[key]==='string'&&(!(key in body)||data[key]===body[key].trim()))&&
+      (data.qrImage===null||typeof data.qrImage==='string')&&(!('qrImage' in body)||data.qrImage===body.qrImage)&&data.currency==='UZS'&&data.provider==='paynet_xolis';
+  }else if(method==='POST'&&(match=/^topups\/([^/]+)\/review$/.exec(path))){
+    const row=data?.topup;
+    valid=object(row)&&row.id===decodeURIComponent(match[1])&&next(row.revision,body?.revision)&&row.status===({approve:'approved',reject:'rejected',request_info:'needs_info'})[body?.decision]&&nonempty(row.status)&&row.reviewReason===reason;
+    if(valid&&body.decision==='approve')valid=row.amountMinor===body.receivedAmountMinor&&row.transferReference===body.transferReference?.trim().toUpperCase();
+  }else if(method==='POST'&&(match=/^topups\/([^/]+)\/corrections$/.exec(path))){
+    const row=data?.correction;
+    valid=object(row)&&row.topupId===decodeURIComponent(match[1])&&row.amountMinor===body?.amountMinor&&row.reason===reason&&nonempty(row.id)&&nonempty(row.entryId)&&nonempty(row.originalEntryId);
+  }else if(method==='POST'&&(match=/^chat-reports\/([^/]+)\/review$/.exec(path))){
+    valid=object(data)&&data.id===decodeURIComponent(match[1])&&next(data.revision,body?.revision)&&data.status===({dismiss:'dismissed',remove:'removed'})[body?.decision]&&nonempty(data.status)&&data.reviewReason===reason;
+  }else if(method==='POST'&&(match=/^disputes\/([^/]+)\/resolve$/.exec(path))){
+    const row=data?.case,id=decodeURIComponent(match[1]);
+    valid=object(row)&&data.bookingId===id&&row.bookingId===id&&next(row.revision,body?.revision)&&row.status==='resolved'&&row.outcome===body?.outcome&&row.reason===reason&&row.refundMinor===body?.refundMinor;
+  }else if(method==='POST'&&(match=/^incidents\/([^/]+)\/([^/]+)\/excuse$/.exec(path))){
+    const row=data?.incident;
+    valid=object(row)&&row.booking_id===decodeURIComponent(match[1])&&row.user_id===decodeURIComponent(match[2])&&next(row.revision,body?.revision)&&
+      row.excused===(body?.excused===true?1:0)&&integer(data.count30Days)&&data.reviewRequired===(data.count30Days>=3);
+  }else if(method==='POST'&&(match=/^work-queue\/(support|listing|chat_report)\/[^/]+(\/escalate)?$/.exec(path))){
+    const event=data?.event,assignment=data?.assignment;
+    // An idempotent retry returns the original event and the CURRENT assignment.
+    // A later assignment must not invalidate that original successful receipt.
+    valid=object(event)&&object(event.after)&&object(assignment)&&nonempty(event.id)&&next(event.revision,body?.revision)&&event.reason===reason&&
+      event.after.assignee===body?.assignee&&sameTime(event.after.dueAt,body?.dueAt)&&integer(assignment.revision)&&assignment.revision>=event.revision&&
+      (match[2]?event.after.escalated===true:event.after.escalated!==true);
+  }
+  if(!valid){const error=Error('Amal tasdiqlanmadi. Saqlangan bo‘lishi mumkin; holatni yangilab tekshiring.');error.code='unconfirmed';throw error;}
 }
 function requireConfirmation(data){
   if(!data||typeof data!=='object'||Array.isArray(data)||data.ok!==true)throw Error('Amal tasdiqlanmadi. Holatni yangilab tekshiring yoki qayta urinib ko‘ring.');
@@ -222,15 +272,18 @@ function drawMessages(scroll=false){
     if(m.image){const img=el('img');img.src=source(m.image);img.alt='Yuborilgan rasm';bubble.append(img);}
     if(m.text)bubble.append(el('div',m.text));
     bubble.append(el('small',(m.mine?'Mijoz':'Momiq yordam xizmati')+' · '+new Date(m.time).toLocaleString('uz-UZ')));
-    const del=el('button','O‘chirish');
+    const del=el('button','O‘chirish');let pendingDelete=null;
     del.onclick=async()=>{
       if(!current()||del.disabled)return;
-      const reason=prompt('Xabarni o‘chirish sababi (matn va rasm qayta tiklanmaydi):');
-      if(reason===null)return;
-      if(!reason.trim()){notice('Sababni kiriting.');return;}
+      if(!pendingDelete){
+        const reason=prompt('Xabarni o‘chirish sababi (matn va rasm qayta tiklanmaydi):');
+        if(reason===null)return;
+        if(!reason.trim()){notice('Sababni kiriting.');return;}
+        pendingDelete={reason:reason.trim()};
+      }
       del.disabled=true;
-      try{await api('messages/'+m.id,'DELETE',{reason:reason.trim()});if(current())await refreshChat();}
-      catch(e){if(current())notice(e.message);}
+      try{await api('messages/'+m.id,'DELETE',pendingDelete);if(current())await refreshChat();}
+      catch(e){if(current()){notice(e.message);del.textContent='Ayni o‘chirishni qayta yuborish';}}
       finally{if(current())del.disabled=false;}
     };
     bubble.append(del);box.append(bubble);
