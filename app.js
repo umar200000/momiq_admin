@@ -18,7 +18,7 @@ async function api(path,method='GET',body){
   const transport=new AbortController();
   const deadline=setTimeout(()=>{timedOut=true;transport.abort();},60000);
   try{
-    const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',signal:transport.signal});
+    const r=await fetch('/api/admin/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',redirect:'error',signal:transport.signal});
     if(generation!==authGeneration)throw Error('Sessiya o‘zgardi; sahifani qayta oching.');
     unauthorized=r.status===401;
     if(unauthorized){resetAdminView();generation=authGeneration;}
@@ -38,15 +38,20 @@ async function api(path,method='GET',body){
     throw error;
   }finally{clearTimeout(deadline);}
 }
-async function startAdmin(){
+function requireAuthConfirmation(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||data.ok!==true)throw Error('Amal tasdiqlanmadi. Holatni yangilab tekshiring yoki qayta urinib ko‘ring.');
+}
+async function startAdmin(expectedUsername){
   resetAdminView();const generation=authGeneration;
   try{
     const operator=await api('me');if(generation!==authGeneration)return;
-    if(!operator||!Array.isArray(operator.panels)||!operator.panels.length)throw Error('Operator huquqlari aniqlanmadi.');
-    state.operator=operator;
     const labels={support:'Yordam',moderation:'Moderatsiya',finance:'Moliya',administrator:'Administrator'};
+    const panels=['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings','metrics','workQueue'];
+    if(!operator||Array.isArray(operator)||typeof operator.username!=='string'||!operator.username.trim()||operator.username.length>100||typeof operator.role!=='string'||!Object.hasOwn(labels,operator.role)||!Array.isArray(operator.panels)||!operator.panels.length||new Set(operator.panels).size!==operator.panels.length||!operator.panels.every(id=>panels.includes(id)))throw Error('Operator huquqlari aniqlanmadi.');
+    if(typeof expectedUsername==='string'&&operator.username!==expectedUsername)throw Error('Kirish tasdig‘i operator hisobiga mos kelmadi. Qayta kiring.');
+    state.operator=operator;
     $('#operatorIdentity').textContent=operator.username+' · '+(labels[operator.role]||operator.role);
-    for(const id of ['users','sitters','listings','topups','chatReports','bookings','disputes','support','reviews','settings','metrics','workQueue'])$('#'+id+'Nav').hidden=!operator.panels.includes(id);
+    for(const id of panels)$('#'+id+'Nav').hidden=!operator.panels.includes(id);
     $('#app').hidden=false;$('#login').hidden=true;
     const first=operator.panels[0];
     if(first==='users')await nav('customer');
@@ -241,14 +246,14 @@ $('#loginForm').onsubmit=async e=>{
   const form=e.target,b=form.querySelector('button'),logout=$('#logout');
   const credentials={username:form.username.value,password:form.password.value};
   form.password.value='';b.disabled=logout.disabled=true;
-  try{await api('login','POST',credentials);if(generation===authGeneration)await startAdmin();}
+  try{requireAuthConfirmation(await api('login','POST',credentials));if(generation===authGeneration)await startAdmin(credentials.username.trim());}
   catch(error){if(authFailureIsCurrent(generation,error))notice(error.message);}
   finally{authPending=false;b.disabled=logout.disabled=false;}
 };
 $('#logout').onclick=async()=>{
   if(authPending)return;authPending=true;
   const generation=authGeneration,button=$('#logout');button.disabled=true;
-  try{await api('logout','POST',{});if(generation===authGeneration)resetAdminView();}
+  try{requireAuthConfirmation(await api('logout','POST',{}));if(generation===authGeneration)resetAdminView();}
   catch(error){if(authFailureIsCurrent(generation,error))notice(error.message);}
   finally{authPending=false;button.disabled=false;}
 };

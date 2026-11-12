@@ -40,6 +40,55 @@ test('logout serializes requests and clears private state only after confirmatio
   assert.equal(vm.runInContext('state.messages.length',s.context),0);assert.equal(s.get('#app').hidden,true);assert.equal(s.get('#logout').disabled,false);
 });
 
+test('login requires an explicit acknowledgement before fetching private identity',async()=>{
+  for(const data of [null,[],true,'ok',{}, {ok:false},{ok:'true'},{ok:1}]){
+    const s=setup();s.form.username.value='TEST';s.form.password.value='TEST ONLY';
+    const logging=s.login();await tick();s.pending[0].reply(data);await tick();
+    assert.equal(s.pending.length,1,'invalid acknowledgement must not fetch identity');
+    await logging;assert.equal(s.get('#app').hidden,true);assert.equal(s.button.disabled,false);
+    assert.match(s.get('#notice').textContent,/tasdiqlanmadi/);
+    assert.equal(s.form.password.value,'');
+  }
+});
+
+test('logout without confirmation preserves the view and permits explicit retry',async()=>{
+  for(const data of [null,[],true,'ok',{}, {ok:false},{ok:'true'},{ok:1}]){
+    const s=setup();vm.runInContext("state.operator={username:'TEST'};state.panel='accounts';state.messages=[{text:'PRIVATE'}]",s.context);s.get('#app').hidden=false;
+    const leaving=s.get('#logout').onclick();await tick();s.pending[0].reply(data);await leaving;
+    assert.equal(s.get('#app').hidden,false);assert.equal(vm.runInContext('state.messages.length',s.context),1);
+    assert.match(s.get('#notice').textContent,/tasdiqlanmadi/);assert.equal(s.get('#logout').disabled,false);
+    const retry=s.get('#logout').onclick();await tick();assert.equal(s.pending.length,2);
+    s.pending[1].reply({ok:true});await retry;assert.equal(s.get('#app').hidden,true);
+  }
+});
+
+test('malformed operator identity cannot reveal the workspace or request an index',async()=>{
+  const valid={username:'TEST',role:'administrator',panels:['users']};
+  for(const patch of [{username:null},{username:''},{username:'  '},{username:12},{username:'x'.repeat(101)},{role:null},{role:['administrator']},{role:'future-role'},{panels:['users','users']},{panels:['users',null]},{panels:['users','private-future-panel']}]){
+    const s=setup();const starting=vm.runInContext('startAdmin()',s.context);await tick();
+    s.pending[0].reply({...valid,...patch});await tick();
+    assert.equal(s.pending.length,1,'malformed identity must not load private data');
+    await starting;assert.equal(s.get('#app').hidden,true);assert.equal(vm.runInContext('state.operator',s.context),null);
+    assert.match(s.get('#notice').textContent,/huquqlari/);
+  }
+});
+
+test('post-login identity must match the submitted operator, not a later form edit',async()=>{
+  for(const returned of ['OTHER','TEST']){
+    const s=setup();s.form.username.value='  TEST  ';s.form.password.value='TEST ONLY';
+    const logging=s.login();await tick();s.form.username.value='OTHER';s.pending[0].reply({ok:true});await tick();
+    s.pending[1].reply({username:returned,role:'administrator',panels:['users']});await tick();
+    if(returned==='OTHER'){
+      assert.equal(s.pending.length,2);await logging;assert.equal(s.get('#app').hidden,true);
+      assert.equal(vm.runInContext('state.operator',s.context),null);assert.match(s.get('#notice').textContent,/mos kelmadi/);
+    }else{
+      assert.equal(s.pending[2].path,'/api/admin/users?role=customer');
+      s.pending[2].reply({users:[],sitters:{},nextCursor:null});await logging;
+      assert.equal(vm.runInContext('state.operator.username',s.context),'TEST');
+    }
+  }
+});
+
 test('malformed unauthorized response clears private state with a retryable login error',async()=>{
   for(const invalid of ['html','null']){
     const s=setup();vm.runInContext("state.operator={username:'TEST'};state.panel='accounts';state.messages=[{text:'PRIVATE'}]",s.context);
@@ -165,5 +214,27 @@ test('deadline cancels actual loopback fetch while headers or JSON body are stal
     }finally{
       server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
     }
+  }
+});
+
+test('admin redirects never forward credentials or reads to another endpoint',async()=>{
+  let forwarded=0;
+  const target=require('node:http').createServer((req,res)=>{forwarded++;res.writeHead(200,{'Content-Type':'application/json'});res.end('{"ok":true}');});
+  await new Promise(resolve=>target.listen(0,'127.0.0.1',resolve));
+  const redirect=require('node:http').createServer((req,res)=>{
+    res.writeHead(Number(req.url.split('/').pop()),{Location:'http://127.0.0.1:'+target.address().port+'/unexpected'});res.end();
+  });
+  await new Promise(resolve=>redirect.listen(0,'127.0.0.1',resolve));
+  try{
+    for(const status of [301,302,303,307,308])for(const method of ['GET','POST']){
+      const s=setup();let attempts=0;
+      s.context.fetch=(_,options)=>{attempts++;return fetch('http://127.0.0.1:'+redirect.address().port+'/'+status,options);};
+      await assert.rejects(vm.runInContext(`api('login','${method}',${method==='POST'?"{username:'TEST',password:'PRIVATE TEST ONLY'}":'undefined'})`,s.context));
+      assert.equal(forwarded,0,'redirect target must receive no request, including its body');
+      assert.equal(attempts,1);assert.equal(s.deadlines().length,0);
+    }
+  }finally{
+    redirect.closeAllConnections();target.closeAllConnections();
+    await Promise.all([new Promise(resolve=>redirect.close(resolve)),new Promise(resolve=>target.close(resolve))]);
   }
 });
