@@ -15,6 +15,15 @@ test('review is rendered as text and only visibility can be moderated',()=>{
   const form=article.children.find(n=>n.tag==='form');assert.equal(form.children.filter(n=>n.tag==='textarea').length,0);
   assert.equal(form.children[0].textContent,'Qaror sababi');
 });
+
+test('a moderator cannot restore a hidden review even through a retained callback',async()=>{
+  const s=setup();s.context.state.operator={role:'moderation'};s.context.row.hidden=true;s.get('#chatPanel').replaceChildren();
+  vm.runInContext("renderReview($('#chatPanel'),row)",s.context);
+  const article=s.get('#chatPanel').children[0],form=article.children.find(n=>n.tag==='form');
+  assert.equal(form.hidden,true);form.children[0].children[0].value='TEST restore';await form.onsubmit({preventDefault(){}});assert.equal(s.calls.length,0);
+  s.context.state.operator.role='administrator';s.get('#chatPanel').replaceChildren();vm.runInContext("renderReview($('#chatPanel'),row)",s.context);
+  assert.notEqual(s.get('#chatPanel').children[0].children.find(n=>n.tag==='form').hidden,true);
+});
 test('moderation requires reason and retries the same locked decision',async()=>{
   const {get,calls,setFail}=setup();const article=get('#chatPanel').children[0],form=article.children.find(n=>n.tag==='form');
   const reason=form.children[0].children[0];

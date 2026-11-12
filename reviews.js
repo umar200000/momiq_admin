@@ -32,9 +32,10 @@ function renderReview(list,row,current=()=>true) {
   article.append(el('p',row.hidden?'Moderatsiya yashirgan.':row.withdrawn?'Muallif yashirgan.':'Ko‘rinmoqda.'));
   const form=el('form'),label=el('label','Qaror sababi'),reason=el('input');reason.required=true;reason.maxLength=500;label.append(reason);form.append(label);
   const submit=el('button',row.hidden?'Moderatsiya cheklovini olish':'Sharhni yashirish');form.append(submit);article.append(form);
+  if(row.hidden&&state.operator?.role!=='administrator'){form.hidden=true;article.append(el('p','Qayta ko‘rsatishni faqat administrator tasdiqlaydi.'));}
   let pending=null;
   form.onsubmit=async event=>{
-    event.preventDefault();if(submit.disabled||!current()||(!pending&&!reason.value.trim()))return;
+    event.preventDefault();if(submit.disabled||!current()||(row.hidden&&state.operator?.role!=='administrator')||(!pending&&!reason.value.trim()))return;
     pending??={revision:row.revision,hidden:!row.hidden,reason:reason.value.trim(),requestId:crypto.randomUUID()};
     submit.disabled=true;reason.disabled=true;
     try{await api('reviews/'+row.id+'/moderate','POST',pending);if(current())await openReviews();}

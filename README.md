@@ -1,5 +1,7 @@
 # Momiq admin panel
 
+Administrator: **Komissiya / QR → Hujjatlar va rekvizitlar** opens the five legal drafts and editable organization details (requires backend schema 30). Saves append an immutable version and audit event; stale/uncertain responses retain the text. Plain-text preview substitutes the organization placeholders and never executes HTML. Drafts are not published or presented as accepted terms. Only administrators may restore hidden reviews or approve previously rejected/suspended listings.
+
 Backendni ishga tushiring va http://127.0.0.1:8080/admin/ ni oching.
 Panel shu serverdan xizmat qilinadi; alohida npm install talab qilinmaydi.
 

@@ -60,6 +60,7 @@ function renderWalletSettings(config) {
   ++walletViewGeneration;const current=walletViewScope();
   const panel = $('#walletPanel'); panel.replaceChildren();
   panel.append(el('h2', 'Komissiya va balans to‘ldirish'), el('p', 'Mijoz xizmat pulini enagaga bevosita to‘laydi. Ishlatilmagan Momiq balansi qaytarilmaydi. Yangi mijozlar uchun minimal balans: ' + walletMoney(config.minimumBalanceMinor)));
+  if(state.operator?.role==='administrator'){const legal=el('button','Hujjatlar va rekvizitlar','secondary');legal.onclick=()=>{if(current())openLegalDocuments();};panel.append(legal);}
   const form = el('form');
   const rate = walletField(form, 'Komissiya (%)', 'rate');
   rate.inputMode = 'decimal'; rate.value = String(config.commissionBps / 100);
@@ -290,3 +291,53 @@ function appendTopupCorrections(card,row,current=walletViewScope()) {
 }
 $('#topupsNav').onclick = () => openWalletAdmin('topups');
 $('#settingsNav').onclick = () => openWalletAdmin('settings');
+
+const legalOrganization={legalName:'Yuridik nom',registration:'Ro‘yxat / STIR ma’lumoti',address:'Rasmiy manzil',supportEmail:'Yordam emaili',supportPhone:'Yordam telefoni',website:'Rasmiy sayt'};
+const legalDocuments={terms:'Foydalanish shartlari',privacy:'Maxfiylik',cancellation:'Bekor qilish va nizolar',community:'Hamjamiyat qoidalari',deletion:'Hisobni o‘chirish'};
+function validateLegalDraft(data,submitted){
+  const object=v=>v&&typeof v==='object'&&!Array.isArray(v);
+  if(!object(data)||!Number.isSafeInteger(data.version)||data.version<0||data.status!=='draft')throw Error('Hujjat javobi tasdiqlanmadi.');
+  for(const [group,keys] of [['organization',legalOrganization],['documents',legalDocuments]]){
+    if(!object(data[group])||Object.keys(data[group]).length!==Object.keys(keys).length||!Object.keys(keys).every(key=>typeof data[group][key]==='string'))throw Error('Hujjat tarkibi tasdiqlanmadi.');
+    if(submitted&&!Object.keys(keys).every(key=>data[group][key]===submitted[group][key].trim()))throw Error('Saqlangan hujjat yuborilgan qoralamaga mos emas. Holatni tekshiring.');
+  }
+  if(submitted&&data.version!==submitted.version+1)throw Error('Hujjat versiyasi tasdiqlanmadi. Holatni tekshiring.');
+}
+async function openLegalDocuments(){
+  if(state.operator?.role!=='administrator')return;
+  const generation=++walletGeneration;state.panel='wallet';walletSection='legal';state.tab='profile';
+  for(const id of ['accountWorkspace','accountStats','chatPanel'])$('#'+id).hidden=true;
+  const panel=$('#walletPanel');panel.hidden=false;panel.replaceChildren(el('p','Hujjatlar yuklanmoqda…'));
+  $('#heading').textContent='Hujjatlar va rekvizitlar';$('#refresh').onclick=openLegalDocuments;
+  const current=()=>generation===walletGeneration&&state.panel==='wallet'&&!panel.hidden&&state.operator?.role==='administrator';
+  try{const data=await api('legal-documents');if(!current())return;validateLegalDraft(data);renderLegalDocuments(data,panel,current);}
+  catch(error){if(current())panel.replaceChildren(el('p',error.message));}
+}
+function renderLegalDocuments(data,panel,current){
+  panel.replaceChildren(el('h2','Yurist ko‘rigi uchun qoralamalar'),el('p','Bu matnlar hali amaldagi oferta emas. Rekvizitlarni va matnlarni to‘ldiring; yurist ko‘rigidan keyin nashr/rozilik bosqichi alohida bajariladi. Eski saqlangan nusxalar o‘zgarmaydi.'));
+  const back=el('button','Komissiya / QR sozlamalariga qaytish','secondary');back.onclick=()=>{if(current())openWalletAdmin('settings');};panel.append(back);
+  const version=el('p','Qoralama versiyasi: '+data.version),form=el('form'),fields={organization:{},documents:{}};panel.append(version,form);
+  for(const [key,label] of Object.entries(legalOrganization)){
+    const input=walletField(form,label,key);input.required=false;input.maxLength=500;input.value=data.organization[key];fields.organization[key]=input;
+  }
+  form.append(el('p','Matnlardagi {{legalName}}, {{registration}}, {{address}}, {{supportEmail}}, {{supportPhone}}, {{website}} joylari ko‘rib chiqishda yuqoridagi rekvizitlar bilan to‘ldiriladi. Bo‘sh joylar “Kiritilmagan” deb ko‘rsatiladi.'));
+  for(const [key,title] of Object.entries(legalDocuments)){
+    const label=el('label',title),input=el('textarea');input.name=key;input.rows=16;input.maxLength=40000;input.required=true;input.value=data.documents[key];label.append(input);form.append(label);fields.documents[key]=input;
+    const preview=el('button','Ko‘rib chiqish: '+title,'secondary'),output=el('pre',undefined,'legalPreview');preview.type='button';output.hidden=true;
+    preview.onclick=()=>{if(!current())return;output.textContent=input.value.replace(/\{\{(legalName|registration|address|supportEmail|supportPhone|website)\}\}/g,(_,name)=>fields.organization[name].value.trim()||'[Kiritilmagan]');output.hidden=false;};form.append(preview,output);
+  }
+  const reason=walletField(form,'Tahrir sababi','reason');reason.maxLength=1000;
+  const save=el('button','Qoralamani saqlash');form.append(save);const inputs=[...Object.values(fields.organization),...Object.values(fields.documents),reason];
+  let revision=data.version;
+  form.onsubmit=async event=>{
+    event.preventDefault();if(!current()||save.disabled||!reason.value.trim())return;
+    const body={version:revision,reason:reason.value.trim()};
+    for(const group of ['organization','documents'])body[group]=Object.fromEntries(Object.entries(fields[group]).map(([key,input])=>[key,input.value.trim()]));
+    save.disabled=true;inputs.forEach(input=>input.disabled=true);
+    try{const result=await api('legal-documents','PUT',body);if(!current())return;validateLegalDraft(result,body);revision=result.version;version.textContent='Qoralama versiyasi: '+revision;reason.value='';notice('Qoralama saqlandi. Hali ommaga nashr qilinmagan.');}
+    catch(error){if(current())notice(error.message);}
+    finally{if(current()){save.disabled=false;inputs.forEach(input=>input.disabled=false);}}
+  };
+  const history=el('div'),more=el('button','Tahrirlar tarixini ko‘rish','secondary');panel.append(more,history);let cursor=null;
+  more.onclick=async()=>{if(!current()||more.disabled)return;more.disabled=true;try{const page=await api('legal-documents/history'+(cursor?'?before='+encodeURIComponent(cursor):''));if(!current())return;for(const row of page.items)history.append(el('p','v'+row.version+' · '+row.actor+' · '+row.created+' · '+row.reason));cursor=page.nextCursor;more.hidden=!cursor;more.textContent='Oldingi tahrirlar';}catch(error){if(current())notice(error.message);}finally{if(current())more.disabled=false;}};
+}

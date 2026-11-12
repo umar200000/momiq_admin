@@ -178,11 +178,13 @@ function renderListingReview(box,x,current=accountViewScope()){
   const testLabel=el('label');const testOnly=el('input');testOnly.type='checkbox';testOnly.checked=false;testLabel.append(testOnly,el('span','Faqat test muhitidagi test e’lonni tasdiqlayapman (MyID o‘rnini bosmaydi).'));form.append(testLabel);
   const actions=el('div',undefined,'actions');const buttons=[];
   for(const [decision,label] of [['approve','Tasdiqlash'],['reject','Rad etish'],['suspend','To‘xtatish']]){
+    if(decision==='approve'&&['rejected','suspended'].includes(status.status)&&state.operator?.role!=='administrator')continue;
     const button=el('button',label,decision==='approve'?'':'secondary');button.type='submit';button.value=decision;buttons.push(button);actions.append(button);
   }
   form.append(actions);form.onsubmit=async event=>{
     event.preventDefault();if(!current()||buttons.some(b=>b.disabled))return;const decision=event.submitter?.value;
     if(!decision||!reason.value.trim())return notice('Qaror sababini kiriting.');
+    if(decision==='approve'&&['rejected','suspended'].includes(status.status)&&state.operator?.role!=='administrator')return notice('Qayta ko‘rsatishni faqat administrator tasdiqlaydi.');
     if(decision==='approve'&&!testOnly.checked)return notice('Hozir faqat belgilangan test e’lon tasdiqlanadi.');
     buttons.forEach(b=>b.disabled=true);
     try{await api('listings/'+x.userId+'/'+x.type+'/review','POST',{decision,reason:reason.value.trim(),testOnly:testOnly.checked,_revision:x._revision});if(!current())return;notice('Moderatsiya qarori saqlandi');await load()}
