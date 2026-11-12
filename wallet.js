@@ -60,7 +60,10 @@ function renderWalletSettings(config) {
   ++walletViewGeneration;const current=walletViewScope();
   const panel = $('#walletPanel'); panel.replaceChildren();
   panel.append(el('h2', 'Komissiya va balans to‘ldirish'), el('p', 'Mijoz xizmat pulini enagaga bevosita to‘laydi. Ishlatilmagan Momiq balansi qaytarilmaydi. Yangi mijozlar uchun minimal balans: ' + walletMoney(config.minimumBalanceMinor)));
-  if(state.operator?.role==='administrator'){const legal=el('button','Hujjatlar va rekvizitlar','secondary');legal.onclick=()=>{if(current())openLegalDocuments();};panel.append(legal);}
+  if(state.operator?.role==='administrator'){
+    const legal=el('button','Hujjatlar va rekvizitlar','secondary');legal.onclick=()=>{if(current())openLegalDocuments();};panel.append(legal);
+    const archive=el('button','Audit va saqlash muddatlari','secondary');archive.onclick=()=>{if(current())openRetentionReview();};panel.append(archive);
+  }
   const form = el('form');
   const rate = walletField(form, 'Komissiya (%)', 'rate');
   rate.inputMode = 'decimal'; rate.value = String(config.commissionBps / 100);
@@ -340,4 +343,52 @@ function renderLegalDocuments(data,panel,current){
   };
   const history=el('div'),more=el('button','Tahrirlar tarixini ko‘rish','secondary');panel.append(more,history);let cursor=null;
   more.onclick=async()=>{if(!current()||more.disabled)return;more.disabled=true;try{const page=await api('legal-documents/history'+(cursor?'?before='+encodeURIComponent(cursor):''));if(!current())return;for(const row of page.items)history.append(el('p','v'+row.version+' · '+row.actor+' · '+row.created+' · '+row.reason));cursor=page.nextCursor;more.hidden=!cursor;more.textContent='Oldingi tahrirlar';}catch(error){if(current())notice(error.message);}finally{if(current())more.disabled=false;}};
+}
+
+const retentionCategories={audit:'Audit tarixi',topups:'Balans to‘ldirish dalillari',wallet:'Moliyaviy yozuvlar',disputes:'Nizo dalillari',support:'Yordam murojaatlari',chatReports:'Chat shikoyatlari'};
+const retentionHolds={active_booking:'Faol bron',missing_booking:'Bron topilmadi',open_dispute:'Ochiq nizo',open_support:'Ochiq murojaat',unresolved_topup:'Tushum bo‘yicha qaror kutilmoqda',open_report:'Shikoyat ochiq',future_timestamp:'Kelajakdagi sana',invalid_timestamp:'Sana tekshirilishi kerak',history_requires_separate_review:'Katta tarix alohida ko‘rib chiqiladi'};
+function validateRetentionPage(data,category,before){
+  const cursor=category==='wallet'||category==='topups'?/^[a-f0-9]{32}$/:/^[1-9][0-9]{0,17}$/;
+  if(!data||data.category!==category||data.mode!=='review_only'||data.deletionEnabled!==false||data.calendarYears!==2||data.timezone!=='Asia/Tashkent'||!Array.isArray(data.items)||data.items.length>50)throw Error('Arxiv javobi tasdiqlanmadi.');
+  if(data.nextCursor!==null&&(typeof data.nextCursor!=='string'||!cursor.test(data.nextCursor)||data.items.length!==50||data.nextCursor!==data.items.at(-1)?.id))throw Error('Arxiv sahifasi tasdiqlanmadi.');
+  let previous=before;
+  for(const row of data.items){
+    if(!row||typeof row.id!=='string'||!cursor.test(row.id)||!['held','retained','expired_review'].includes(row.state)||row.deletionAllowed!==false||!Array.isArray(row.holds)||!row.holds.every(v=>typeof v==='string'))throw Error('Arxiv yozuvi tasdiqlanmadi.');
+    if(previous!==null&&((category==='wallet'||category==='topups')?row.id>=previous:BigInt(row.id)>=BigInt(previous)))throw Error('Arxiv tartibi tasdiqlanmadi.');
+    previous=row.id;
+    for(const key of ['anchorAt','reviewAt'])if(row[key]!==null&&(typeof row[key]!=='string'||!Number.isFinite(Date.parse(row[key]))))throw Error('Arxiv sanasi tasdiqlanmadi.');
+    if(category==='audit'&&(!row.record||String(row.record.id)!==row.id||!['actor','action','target','time'].every(k=>row.record[k]===null||typeof row.record[k]==='string')))throw Error('Audit yozuvi tasdiqlanmadi.');
+  }
+}
+async function openRetentionReview(category='audit'){
+  if(state.operator?.role!=='administrator'||!Object.hasOwn(retentionCategories,category))return;
+  const generation=++walletGeneration;state.panel='wallet';walletSection='retention';state.tab='profile';
+  for(const id of ['accountWorkspace','accountStats','chatPanel'])$('#'+id).hidden=true;
+  const panel=$('#walletPanel');panel.hidden=false;
+  $('#heading').textContent='Audit va saqlash muddatlari';$('#refresh').onclick=()=>openRetentionReview(category);
+  const current=()=>generation===walletGeneration&&state.panel==='wallet'&&!panel.hidden&&state.operator?.role==='administrator';
+  panel.replaceChildren(el('h2',retentionCategories[category]),el('p','2 yillik saqlashni tekshirish. Muddat o‘tishi o‘chirishga ruxsat bermaydi. Huquqiy istisnolar va yakuniy tozalash tartibi hali ko‘rib chiqiladi. Asl yozuvlar saqlanadi; video uchun 30 kunlik qoida o‘zgarmaydi.'));
+  const back=el('button','Komissiya / QR sozlamalariga qaytish','secondary');back.onclick=()=>{if(current())openWalletAdmin('settings');};panel.append(back);
+  for(const [key,label] of Object.entries(retentionCategories)){const button=el('button',label,'secondary');button.disabled=key===category;button.onclick=()=>{if(current())return openRetentionReview(key);};panel.append(button);}
+  const content=el('div'),error=el('p'),more=el('button','Yuklash');panel.append(content,error,more);
+  let cursor=null,loaded=false;
+  const date=value=>value?new Date(value).toLocaleString('uz-UZ',{timeZone:'Asia/Tashkent'}):'Aniqlanmagan';
+  const load=async()=>{
+    if(!current()||more.disabled)return;more.disabled=true;error.textContent='';
+    try{
+      const path=category==='audit'?'audit-archive':'retention-review?category='+category;
+      const page=await api(path+(cursor?(path.includes('?')?'&':'?')+'before='+encodeURIComponent(cursor):''));
+      if(!current())return;validateRetentionPage(page,category,cursor);
+      if(!loaded&&!page.items.length)content.append(el('p','Bu toifada yozuv yo‘q.'));
+      for(const row of page.items){
+        const entry=el('section');entry.append(el('h3','№ '+row.id),el('p',({held:'Saqlash davom etadi — sabab bor',retained:'Saqlash muddati tugamagan',expired_review:'2 yil o‘tgan — alohida ko‘rib chiqish kerak'})[row.state]),el('p','Hisob boshlanishi: '+date(row.anchorAt)+' · Ko‘rib chiqish sanasi: '+date(row.reviewAt)));
+        if(row.holds.length)entry.append(el('p',row.holds.map(v=>retentionHolds[v]||v).join('; ')));
+        if(row.record){entry.append(el('p',(row.record.actor||'—')+' · '+(row.record.action||'—')),el('pre',row.record.target||'—','legalPreview'));}
+        content.append(entry);
+      }
+      cursor=page.nextCursor;loaded=true;more.hidden=cursor===null;more.textContent='Oldingi yozuvlar';
+    }catch(e){if(current()){error.textContent=e.message;more.textContent='Qayta yuklash';}}
+    finally{if(current())more.disabled=false;}
+  };
+  more.onclick=load;await load();
 }
