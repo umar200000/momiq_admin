@@ -24,6 +24,7 @@ function profileForm(s){
 
 test('profile upload prevents early save and removing it cancels the pending image',async()=>{
   const s=setup(()=>({users:[],sitters:{}}));await tick();const form=profileForm(s),file=form.children[1].children[0];
+  form.elements.first.value='TEST changed';
   let finish;s.context.readImage=()=>new Promise(resolve=>finish=resolve);
   const writes=[];s.context.fetch=async(path,options)=>{if(options.method==='PUT')writes.push(JSON.parse(options.body));return {ok:false,status:409,json:async()=>({error:'TEST revision changed'})};};
   file.files=['TEST image'];const selecting=file.onchange();
@@ -36,12 +37,34 @@ test('profile upload prevents early save and removing it cancels the pending ima
 
 test('profile save from previous selection cannot reload or notify another panel',async()=>{
   const s=setup(()=>({users:[],sitters:{}}));await tick();const form=profileForm(s);let finish;const requests=[];
+  form.elements.first.value='TEST changed';
   s.context.fetch=async(path,options)=>{requests.push(path);return {ok:true,json:()=>new Promise(resolve=>finish=resolve)};};
   const saving=form.onsubmit({preventDefault(){}});await tick();
   vm.runInContext("state.panel='support';state.selected='bbb'",s.context);s.get('#notice').textContent='NEW VIEW';
   finish({ok:true});await saving;
   assert.deepEqual(requests,['/api/admin/users/aaa']);assert.equal(s.get('#notice').textContent,'NEW VIEW');
   await form.onsubmit({preventDefault(){}});assert.equal(requests.length,1);
+});
+
+test('profile no-op sends nothing and a missing save acknowledgement keeps the edited form',async()=>{
+  const s=setup(()=>({users:[],sitters:{}}));await tick();const form=profileForm(s),writes=[];
+  let response={};
+  s.context.fetch=async(path,options)=>{
+    if(options.method==='PUT')writes.push({path,body:JSON.parse(options.body)});
+    return {ok:true,json:async()=>options.method==='PUT'?response:{users:[],sitters:{}}};
+  };
+  await form.onsubmit({preventDefault(){}});assert.equal(writes.length,0);
+  assert.equal(s.get('#notice').textContent,'O‘zgarish yo‘q.');
+  form.elements.first.value=' TEST corrected ';
+  await form.onsubmit({preventDefault(){}});
+  assert.equal(writes.length,1);assert.match(s.get('#notice').textContent,/tasdiqlanmadi/);
+  assert.equal(form.elements.first.value,' TEST corrected ');
+  assert.equal(writes[0].body.account.profile.first,'TEST corrected');
+  assert.equal(writes[0].body._revision,4);assert.equal(writes[0].body.reason,'TEST reason');
+  assert.equal('blocked' in writes[0].body,false);
+  assert.equal(vm.runInContext('u.account.profile.first',s.context),'TEST aaa');
+  response={ok:true};await form.onsubmit({preventDefault(){}});
+  assert.deepEqual(writes[1],writes[0]);assert.equal(s.get('#notice').textContent,'Profil saqlandi');
 });
 
 test('latest legacy attachment wins while older picker failure remains silent',async()=>{
